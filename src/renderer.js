@@ -27,7 +27,7 @@ const COLORS = Object.freeze({
 export function drawGameOverlay(ctx, project, state, viewport, options = {}) {
   const width = viewport.width;
   const height = viewport.height;
-  ctx.clearRect(0, 0, width, height);
+  if (options.clear !== false) ctx.clearRect(0, 0, width, height);
   if (!state) return;
 
   const visible = (point, padding = 70) =>
@@ -37,13 +37,15 @@ export function drawGameOverlay(ctx, project, state, viewport, options = {}) {
   drawBase(ctx, project, state, visible);
   drawTravelPath(ctx, project, state);
   drawPois(ctx, project, state, visible, options);
+  drawVehicle(ctx, project, state, visible);
   drawZombies(ctx, project, state, visible);
   drawEffects(ctx, project, state, visible);
   drawPlayer(ctx, project, state, visible);
+  drawWeatherForeground(ctx, state, viewport);
 }
 
-export function drawSelectionOverlay(ctx, project, position, viewport) {
-  ctx.clearRect(0, 0, viewport.width, viewport.height);
+export function drawSelectionOverlay(ctx, project, position, viewport, options = {}) {
+  if (options.clear !== false) ctx.clearRect(0, 0, viewport.width, viewport.height);
   if (!position) return;
   const point = project(position);
   if (!point) return;
@@ -342,11 +344,8 @@ function drawZombies(ctx, project, state, visible) {
 
 function drawVehicle(ctx, project, state, visible) {
   if (!state.vehicle?.repaired || state.vehicle.active) return;
-  const parkedPosition = offsetMeters(
-    state.base.pos,
-    Math.max(18, state.base.radius * 0.72),
-    -Math.max(10, state.base.radius * 0.34)
-  );
+  const parkedPosition = state.vehicle.pos;
+  if (!parkedPosition) return;
   const point = project(parkedPosition);
   if (!point || !visible(point, 40)) return;
 

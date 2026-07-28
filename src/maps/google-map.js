@@ -2,19 +2,96 @@ import { drawGameOverlay, drawSelectionOverlay } from "../renderer.js";
 import { REAL_PLACE_SEARCH_TYPES } from "../real-places.js";
 
 let googleMapsPromise = null;
+let googleAuthFailure = null;
+let googleMapsLoaderCancel = null;
+let googleMapsRequiresReload = false;
+const googleAuthFailureListeners = new Set();
+let googleAuthFailureHookInstalled = false;
+
+function googleAuthenticationError() {
+  return new Error("Google Maps a refusé l’authentification de la clé. Vérifiez le domaine, les API autorisées et la facturation.");
+}
+
+function installGoogleAuthFailureHook() {
+  if (googleAuthFailureHookInstalled) return;
+  const previousHandler = window.gm_authFailure;
+  window.gm_authFailure = () => {
+    googleAuthFailure = googleAuthenticationError();
+    for (const listener of [...googleAuthFailureListeners]) listener(googleAuthFailure);
+    if (typeof previousHandler === "function") {
+      try {
+        previousHandler();
+      } catch {
+        // Le gestionnaire de l’hôte ne doit pas empêcher le fallback du jeu.
+      }
+    }
+  };
+  googleAuthFailureHookInstalled = true;
+}
+
+function subscribeGoogleAuthFailure(listener) {
+  installGoogleAuthFailureHook();
+  googleAuthFailureListeners.add(listener);
+  if (googleAuthFailure) listener(googleAuthFailure);
+  return () => googleAuthFailureListeners.delete(listener);
+}
+
+function googleMapsReloadRequiredError() {
+  return Object.assign(
+    new Error(
+      "La clé Google Maps a changé alors que l’API était déjà chargée. Rechargez la page pour appliquer la nouvelle clé."
+    ),
+    { code: "GOOGLE_MAPS_RELOAD_REQUIRED" }
+  );
+}
+
+/**
+ * Retire le chargeur courant avant l'initialisation avec une autre clé.
+ * L'API Google déjà installée dans window ne peut pas être déchargée proprement :
+ * dans ce cas le résultat exige un rechargement, et loadGoogleMaps refusera de
+ * réutiliser silencieusement l'ancienne clé.
+ */
+export function resetGoogleMapsLoader({ reloadIfLoaded = false } = {}) {
+  const requiresReload = Boolean(window.google?.maps);
+  googleMapsLoaderCancel?.();
+  googleMapsLoaderCancel = null;
+  document.getElementById("dead-ground-google-maps")?.remove();
+  googleMapsPromise = null;
+  googleAuthFailure = null;
+  googleMapsRequiresReload = requiresReload;
+
+  if (requiresReload && reloadIfLoaded) {
+    window.location.reload();
+    return { requiresReload: true, reloading: true };
+  }
+
+  return {
+    requiresReload,
+    reloading: false,
+    error: requiresReload ? googleMapsReloadRequiredError() : null
+  };
+}
 
 export function loadGoogleMaps(apiKey) {
+  installGoogleAuthFailureHook();
+  if (googleMapsRequiresReload) return Promise.reject(googleMapsReloadRequiredError());
+  if (googleAuthFailure) return Promise.reject(googleAuthFailure);
   if (window.google?.maps) return Promise.resolve(window.google.maps);
   if (googleMapsPromise) return googleMapsPromise;
   if (!apiKey) return Promise.reject(new Error("Clé Google Maps absente."));
 
+  googleAuthFailure = null;
   googleMapsPromise = new Promise((resolve, reject) => {
     const callbackName = `__deadGroundMapsReady_${Date.now().toString(36)}`;
     const script = document.createElement("script");
     let timeout = 0;
+    let settled = false;
+    const unsubscribeAuthFailure = subscribeGoogleAuthFailure((error) => fail(error));
 
     const cleanup = () => {
       window.clearTimeout(timeout);
+      unsubscribeAuthFailure();
+      googleMapsLoaderCancel = null;
       script.onerror = null;
       try {
         delete window[callbackName];
@@ -23,11 +100,17 @@ export function loadGoogleMaps(apiKey) {
       }
     };
 
-    const fail = (message) => {
+    function fail(reason) {
+      if (settled) return;
+      settled = true;
       cleanup();
       script.remove();
       googleMapsPromise = null;
-      reject(new Error(message));
+      reject(reason instanceof Error ? reason : new Error(reason));
+    }
+
+    googleMapsLoaderCancel = () => {
+      fail(new Error("Le chargement de Google Maps a été réinitialisé."));
     };
 
     timeout = window.setTimeout(() => {
@@ -35,9 +118,14 @@ export function loadGoogleMaps(apiKey) {
     }, 18_000);
 
     window[callbackName] = () => {
+      if (settled) return;
+      if (!window.google?.maps) {
+        fail("Google Maps ne s’est pas initialisé.");
+        return;
+      }
+      settled = true;
       cleanup();
-      if (window.google?.maps) resolve(window.google.maps);
-      else fail("Google Maps ne s’est pas initialisé.");
+      resolve(window.google.maps);
     };
 
     script.id = "dead-ground-google-maps";
@@ -56,7 +144,15 @@ export function loadGoogleMaps(apiKey) {
 export class GoogleMapAdapter {
   static async create(options) {
     await loadGoogleMaps(options.apiKey);
-    return new GoogleMapAdapter(options);
+    if (googleAuthFailure) throw googleAuthFailure;
+    const adapter = new GoogleMapAdapter(options);
+    try {
+      await adapter.whenReady();
+      return adapter;
+    } catch (error) {
+      adapter.destroy();
+      throw error;
+    }
   }
 
   constructor({ container, center, onClick, onStatus }) {
@@ -73,6 +169,15 @@ export class GoogleMapAdapter {
     this.overlay = null;
     this.listeners = [];
     this.resizeObserver = null;
+    this.ready = false;
+    this.readyTimeout = 0;
+    this.resolveReady = null;
+    this.rejectReady = null;
+    this.readyPromise = new Promise((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
+    });
+    this.unsubscribeAuthFailure = subscribeGoogleAuthFailure((error) => this.failReady(error));
 
     this.surface = document.createElement("div");
     this.surface.className = "map-surface google-map-surface";
@@ -128,13 +233,39 @@ export class GoogleMapAdapter {
       this.map.addListener("zoom_changed", () => this.render()),
       this.map.addListener("idle", () => {
         this.render();
-        this.onStatus({ provider: "google", ready: true, label: "Satellite Google Maps" });
+        this.markReady();
       })
     ];
 
     this.resizeObserver = new ResizeObserver(() => this.render());
     this.resizeObserver.observe(this.surface);
+    if (!this.ready) {
+      this.readyTimeout = window.setTimeout(() => {
+        this.failReady(new Error("Google Maps n’a pas terminé le chargement de la carte."));
+      }, 18_000);
+    }
+  }
+
+  whenReady() {
+    return this.readyPromise;
+  }
+
+  markReady() {
+    if (this.ready || this.destroyed) return;
+    this.ready = true;
+    window.clearTimeout(this.readyTimeout);
     this.onStatus({ provider: "google", ready: true, label: "Satellite Google Maps" });
+    this.resolveReady?.();
+    this.resolveReady = null;
+    this.rejectReady = null;
+  }
+
+  failReady(error) {
+    if (this.ready || this.destroyed) return;
+    window.clearTimeout(this.readyTimeout);
+    this.rejectReady?.(error instanceof Error ? error : googleAuthenticationError());
+    this.resolveReady = null;
+    this.rejectReady = null;
   }
 
   setMode(mode) {
@@ -178,15 +309,7 @@ export class GoogleMapAdapter {
   async searchNearbyPois(center, { radius = 1500, maxResultCount = 20 } = {}) {
     const { Place, SearchNearbyRankPreference } = await google.maps.importLibrary("places");
     const request = {
-      fields: [
-        "id",
-        "displayName",
-        "location",
-        "formattedAddress",
-        "primaryType",
-        "types",
-        "googleMapsURI"
-      ],
+      fields: ["id", "location"],
       locationRestriction: { center, radius: Math.min(50000, Math.max(100, radius)) },
       includedPrimaryTypes: REAL_PLACE_SEARCH_TYPES,
       maxResultCount: Math.min(20, Math.max(1, maxResultCount)),
@@ -227,6 +350,8 @@ export class GoogleMapAdapter {
 
   destroy() {
     this.destroyed = true;
+    window.clearTimeout(this.readyTimeout);
+    this.unsubscribeAuthFailure?.();
     this.listeners?.forEach((listener) => listener.remove());
     this.resizeObserver?.disconnect();
     this.overlay?.setMap(null);

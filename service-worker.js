@@ -1,8 +1,13 @@
-const CACHE_NAME = "dead-ground-v2.0.0";
+const BUILD_VERSION = "__DEAD_GROUND_BUILD_VERSION__";
+const CACHE_PREFIX = "dead-ground-";
+const CACHE_NAME = `${CACHE_PREFIX}${BUILD_VERSION}`;
 const APP_SHELL = [
   "./",
   "./index.html",
+  "./legal.css",
+  "./privacy.html",
   "./styles.css",
+  "./terms.html",
   "./config.local.js",
   "./manifest.webmanifest",
   "./icon.svg",
@@ -25,35 +30,74 @@ const APP_SHELL = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
-  self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    )
+      Promise.all(
+        keys
+          .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
-  );
+  const runtimeConfig = requestUrl.pathname.endsWith("/config.local.js");
+  if (event.request.mode === "navigate" || runtimeConfig) {
+    event.respondWith(networkFirst(event.request));
+    return;
+  }
+
+  event.respondWith(staleWhileRevalidate(event));
 });
+
+async function cacheSuccessfulResponse(request, response) {
+  if (!response.ok) return;
+  const cache = await caches.open(CACHE_NAME);
+  await cache.put(request, response.clone());
+}
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    await cacheSuccessfulResponse(request, response);
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (request.mode === "navigate") {
+      const pathname = new URL(request.url).pathname.replace(/\/+$/, "");
+      const legalPage = pathname.endsWith("/privacy")
+        ? "./privacy.html"
+        : pathname.endsWith("/terms")
+          ? "./terms.html"
+          : null;
+      const shell = (legalPage && await caches.match(legalPage)) ||
+        await caches.match("./index.html") ||
+        await caches.match("./");
+      if (shell) return shell;
+    }
+    throw error;
+  }
+}
+
+function staleWhileRevalidate(event) {
+  const revalidation = fetch(event.request).then(async (response) => {
+    await cacheSuccessfulResponse(event.request, response);
+    return response;
+  });
+  event.waitUntil(revalidation.then(() => undefined).catch(() => undefined));
+
+  return caches.match(event.request).then((cached) => cached || revalidation);
+}

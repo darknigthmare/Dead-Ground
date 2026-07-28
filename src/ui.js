@@ -11,6 +11,7 @@ import {
   SURVIVOR_ROLES,
   TUTORIAL_STEPS,
   VEHICLE_DEFINITION,
+  VEHICLE_INTERACTION_RANGE_METERS,
   WEATHER_TYPES,
   ZOMBIE_TYPES
 } from "./constants.js";
@@ -32,6 +33,13 @@ export class GameUI {
     this.phase = "setup";
     this.settings = null;
     this.mapStatus = { provider: "fallback", label: "Terrain de secours procédural" };
+    this.localToastCounter = 0;
+    this.settingsReturnFocus = null;
+    this.locationConsentReturnFocus = null;
+    this.locationConsentPromise = null;
+    this.locationConsentResolver = null;
+    this.latestGameState = null;
+    this.settingsPausedGame = false;
     this.mount();
     this.bindEvents();
   }
@@ -39,7 +47,7 @@ export class GameUI {
   mount() {
     this.root.innerHTML = `
       <main id="game-shell" class="game-shell" data-phase="setup">
-        <div id="map-root" class="map-root" aria-label="Carte du monde"></div>
+        <div id="map-root" class="map-root" role="region" aria-label="Carte du monde"></div>
         <div id="map-atmosphere" class="map-atmosphere" aria-hidden="true"></div>
         <div class="screen-noise" aria-hidden="true"></div>
 
@@ -93,16 +101,20 @@ export class GameUI {
             <button id="start-game" class="primary-button" type="button"><span>Établir la base</span><b>→</b></button>
             <button id="continue-game" class="secondary-button" type="button" hidden>Continuer la sauvegarde</button>
             <button id="open-settings" class="text-button" type="button">⚙ Paramètres Google Maps</button>
+            <nav class="legal-links" aria-label="Informations légales">
+              <a href="./privacy.html">Confidentialité</a>
+              <a href="./terms.html">Conditions d’utilisation</a>
+            </nav>
           </div>
         </section>
 
-        <header id="top-hud" class="top-hud game-only" aria-label="Informations de partie">
+        <header id="top-hud" class="top-hud game-only" role="banner" aria-label="Informations de partie">
           <div class="clock-card hud-card">
             <div class="clock-main"><span id="day-label">JOUR 1</span><strong id="clock-label">08:00</strong></div>
             <div id="day-state" class="state-chip">JOUR</div>
           </div>
           <div id="resource-strip" class="resource-strip hud-card"></div>
-          <div id="weather-card" class="weather-card hud-card" title="Conditions météo">
+          <div id="weather-card" class="weather-card hud-card" role="group" title="Conditions météo">
             <span id="weather-icon">☀</span><div><small>MÉTÉO</small><strong id="weather-label">Ciel clair</strong></div>
           </div>
           <div class="hud-tools hud-card">
@@ -124,7 +136,7 @@ export class GameUI {
           <div id="panel-content" class="panel-content"></div>
         </aside>
 
-        <button id="mobile-panel-toggle" class="mobile-panel-toggle game-only" type="button" data-action="mobile-panel">☰ Gestion</button>
+        <button id="mobile-panel-toggle" class="mobile-panel-toggle game-only" type="button" data-action="mobile-panel" aria-controls="side-panel" aria-expanded="false">☰ Gestion</button>
 
         <section id="player-card" class="player-card hud-card game-only" aria-label="État du survivant">
           <div class="player-card-heading">
@@ -197,9 +209,35 @@ export class GameUI {
             <label class="toggle-row"><input id="sound-setting" type="checkbox" /><span>Effets sonores procéduraux</span></label>
             <label class="toggle-row"><input id="motion-setting" type="checkbox" /><span>Réduire les animations</span></label>
             <div class="provider-note strong">Sans clé valide, le jeu utilise automatiquement son terrain procédural de secours.</div>
+            <nav class="legal-links" aria-label="Informations légales et Google Maps">
+              <a href="./privacy.html">Confidentialité</a>
+              <a href="./terms.html">Conditions d’utilisation</a>
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Confidentialité Google</a>
+              <a href="https://cloud.google.com/maps-platform/terms" target="_blank" rel="noopener noreferrer">Conditions Google Maps</a>
+            </nav>
             <div class="modal-actions">
               <button type="button" data-action="close-settings" class="secondary-button">Annuler</button>
               <button type="button" data-action="save-settings" class="primary-button compact">Enregistrer</button>
+            </div>
+          </section>
+        </div>
+
+        <div id="location-consent-modal" class="modal-backdrop" hidden>
+          <section class="modal-card consent-card" role="dialog" aria-modal="true" aria-labelledby="location-consent-title" aria-describedby="location-consent-description">
+            <span class="modal-kicker">GÉOLOCALISATION</span>
+            <h2 id="location-consent-title">Utiliser votre position actuelle ?</h2>
+            <div id="location-consent-description" class="consent-copy">
+              <p>Vos coordonnées servent uniquement à choisir l’emplacement de votre base et les objectifs du secteur.</p>
+              <p>Elles sont conservées localement dans la sauvegarde de ce navigateur. Si Google Maps est activé, elles sont aussi envoyées à Google pour afficher la carte et rechercher les lieux proches.</p>
+            </div>
+            <nav class="legal-links" aria-label="En savoir plus sur la géolocalisation">
+              <a href="./privacy.html">Confidentialité</a>
+              <a href="./terms.html">Conditions d’utilisation</a>
+              <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Confidentialité Google</a>
+            </nav>
+            <div class="modal-actions">
+              <button type="button" data-action="cancel-location-consent" class="secondary-button">Annuler</button>
+              <button type="button" data-action="allow-location-consent" class="primary-button compact">Autoriser ma position</button>
             </div>
           </section>
         </div>
@@ -244,6 +282,34 @@ export class GameUI {
   }
 
   bindEvents() {
+    this.root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (this.isLocationConsentOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.resolveLocationConsent(false);
+          return;
+        }
+        if (this.isSettingsOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeSettings();
+          return;
+        }
+        if (this.isMobilePanelOpen()) {
+          event.preventDefault();
+          event.stopPropagation();
+          this.closeMobilePanel();
+          return;
+        }
+      }
+
+      if (event.key === "Tab") {
+        const activeModal = this.getActiveModal();
+        if (activeModal) this.trapModalFocus(event, activeModal);
+      }
+    }, true);
+
     this.root.addEventListener("click", (event) => {
       const difficultyButton = event.target.closest("[data-difficulty]");
       if (difficultyButton) {
@@ -341,6 +407,7 @@ export class GameUI {
       sprint: () => this.callbacks.toggleSprint?.(),
       "auto-fire": () => this.callbacks.toggleAutoFire?.(),
       "return-base": () => this.callbacks.returnToBase?.(),
+      "return-vehicle": () => this.callbacks.returnToVehicle?.(),
       scavenge: () => this.callbacks.scavenge?.(),
       "clear-nest": () => this.callbacks.clearNest?.(),
       "cancel-activity": () => this.callbacks.cancelActivity?.(),
@@ -359,11 +426,13 @@ export class GameUI {
       "export-save": () => this.callbacks.exportSave?.(),
       settings: () => this.openSettings(),
       "close-settings": () => this.closeSettings(),
-      "save-settings": () => this.saveSettingsFromForm(),
+      "save-settings": () => void this.saveSettingsFromForm(),
       "toggle-key": () => this.toggleKeyVisibility(),
+      "allow-location-consent": () => this.resolveLocationConsent(true),
+      "cancel-location-consent": () => this.resolveLocationConsent(false),
       "quit-menu": () => this.callbacks.quitToMenu?.(),
       restart: () => this.callbacks.restart?.(),
-      "mobile-panel": () => this.root.querySelector("#side-panel").classList.toggle("mobile-open")
+      "mobile-panel": () => this.toggleMobilePanel()
     };
     handlers[action]?.();
   }
@@ -387,11 +456,86 @@ export class GameUI {
   setPhase(phase) {
     this.phase = phase;
     this.shell.dataset.phase = phase;
+    const setup = phase === "setup";
+    this.setupPanel.hidden = !setup;
+    this.setupPanel.inert = !setup;
+    this.setupPanel.setAttribute("aria-hidden", String(!setup));
     if (phase === "setup") {
+      this.latestGameState = null;
+      this.settingsPausedGame = false;
       this.root.querySelector("#pause-modal").hidden = true;
       this.root.querySelector("#gameover-modal").hidden = true;
       this.root.querySelector("#victory-modal").hidden = true;
-      this.root.querySelector("#side-panel").classList.remove("mobile-open");
+      this.closeMobilePanel({ restoreFocus: false });
+    }
+    this.syncMobilePanelState();
+  }
+
+  isNarrowLayout() {
+    const view = this.root.ownerDocument?.defaultView ?? globalThis.window;
+    if (typeof view?.matchMedia === "function") return view.matchMedia("(max-width: 980px)").matches;
+    return Number(view?.innerWidth ?? 981) <= 980;
+  }
+
+  isMobilePanelOpen() {
+    return this.root.querySelector("#side-panel").classList.contains("mobile-open");
+  }
+
+  toggleMobilePanel() {
+    if (this.isMobilePanelOpen()) this.closeMobilePanel();
+    else this.openMobilePanel();
+  }
+
+  openMobilePanel() {
+    const panel = this.root.querySelector("#side-panel");
+    const toggle = this.root.querySelector("#mobile-panel-toggle");
+    panel.classList.add("mobile-open");
+    this.syncMobilePanelState();
+    toggle.setAttribute("aria-expanded", "true");
+    const activeTab = panel.querySelector("[data-tab].active");
+    activeTab?.focus({ preventScroll: true });
+  }
+
+  closeMobilePanel({ restoreFocus = true } = {}) {
+    const panel = this.root.querySelector("#side-panel");
+    const toggle = this.root.querySelector("#mobile-panel-toggle");
+    const wasOpen = panel.classList.contains("mobile-open");
+    panel.classList.remove("mobile-open");
+    this.syncMobilePanelState();
+    toggle.setAttribute("aria-expanded", "false");
+    if (wasOpen && restoreFocus && this.phase === "game") toggle.focus({ preventScroll: true });
+  }
+
+  syncMobilePanelState() {
+    const panel = this.root.querySelector("#side-panel");
+    const toggle = this.root.querySelector("#mobile-panel-toggle");
+    const available = this.phase === "game";
+    const narrow = this.isNarrowLayout();
+    const open = available && (!narrow || panel.classList.contains("mobile-open"));
+    panel.inert = !open;
+    panel.setAttribute("aria-hidden", String(!open));
+    toggle.setAttribute("aria-expanded", String(available && narrow && panel.classList.contains("mobile-open")));
+  }
+
+  getActiveModal() {
+    const backdrops = [...this.root.querySelectorAll(".modal-backdrop:not([hidden])")];
+    return backdrops.at(-1)?.querySelector('[role="dialog"]') ?? null;
+  }
+
+  trapModalFocus(event, modal) {
+    const focusable = [...modal.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )].filter((element) => !element.hidden);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    const active = this.root.ownerDocument?.activeElement;
+    if (event.shiftKey && (active === first || !modal.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !modal.contains(active))) {
+      event.preventDefault();
+      first.focus();
     }
   }
 
@@ -423,6 +567,7 @@ export class GameUI {
 
   renderGame(state, settings) {
     if (!state) return;
+    this.latestGameState = state;
     this.settings = settings;
     this.setPhase("game");
     const day = gameDay(state.totalMinutes);
@@ -441,7 +586,12 @@ export class GameUI {
     const weather = WEATHER_TYPES[state.weather?.type] ?? WEATHER_TYPES.clear;
     this.root.querySelector("#weather-icon").textContent = weather.icon;
     this.root.querySelector("#weather-label").textContent = weather.label;
-    this.root.querySelector("#weather-card").title = `${weather.description} · encore ${Math.max(1, Math.round(state.weather?.remainingMinutes ?? 0))} min de jeu`;
+    const weatherSummary = `${weather.label}. ${weather.description} Encore ${Math.max(1, Math.round(state.weather?.remainingMinutes ?? 0))} minutes de jeu.`;
+    this.root.querySelector("#weather-card").title = weatherSummary;
+    this.root.querySelector("#weather-card").setAttribute("aria-label", weatherSummary);
+    const soundButton = this.root.querySelector('[data-action="toggle-sound"]');
+    soundButton.setAttribute("aria-pressed", String(settings.soundEnabled !== false));
+    soundButton.setAttribute("aria-label", settings.soundEnabled === false ? "Activer le son" : "Couper le son");
 
     this.renderResources(state.resources);
     this.renderVitals(state);
@@ -456,16 +606,19 @@ export class GameUI {
 
     const now = performance.now();
     if (now - this.lastPanelRender > 550) {
-      this.lastPanelRender = now;
-      this.renderPanel(state);
+      const active = this.root.ownerDocument?.activeElement;
+      if (!active || !this.panelContent.contains(active)) {
+        this.lastPanelRender = now;
+        this.renderPanel(state);
+      }
     }
   }
 
   renderResources(resources) {
     const strip = this.root.querySelector("#resource-strip");
     strip.innerHTML = Object.entries(RESOURCE_META).map(([id, meta]) => `
-      <div class="resource-item" title="${escapeHtml(meta.label)}">
-        <span>${meta.icon}</span><b>${Math.floor(resources[id] ?? 0)}</b><small>${escapeHtml(meta.label)}</small>
+      <div class="resource-item" role="group" aria-label="${escapeHtml(meta.label)} : ${Math.floor(resources[id] ?? 0)}" title="${escapeHtml(meta.label)}">
+        <span aria-hidden="true">${meta.icon}</span><b>${Math.floor(resources[id] ?? 0)}</b><small>${escapeHtml(meta.label)}</small>
       </div>
     `).join("");
   }
@@ -492,6 +645,9 @@ export class GameUI {
     if (player.injury === "sprain") conditions.push('<span class="warning">ENTORSE</span>');
     if (player.injury === "fracture") conditions.push('<span class="danger">FRACTURE</span>');
     if (state.vehicle.active) conditions.push(`<span class="vehicle">▰ FOURGON ${Math.ceil(state.vehicle.condition)}%</span>`);
+    else if (state.vehicle.repaired) {
+      conditions.push(`<span class="vehicle">▰ FOURGON GARÉ · ${formatDistance(distanceMeters(player.pos, state.vehicle.pos))}</span>`);
+    }
     this.root.querySelector("#condition-chips").innerHTML = conditions.join("");
     this.root.querySelector("#player-status-label").textContent =
       player.infection >= 75 ? "CONTAMINÉ" :
@@ -507,14 +663,18 @@ export class GameUI {
     const melee = actionDock.querySelector('[data-action="melee"]');
     const heal = actionDock.querySelector('[data-action="heal"]');
     const antidote = actionDock.querySelector('[data-action="antidote"]');
-    fire.disabled = state.resources.ammo <= 0 || state.player.fireCooldown > 0 || Boolean(state.activity);
-    melee.disabled = state.player.stamina < 9 || state.player.meleeCooldown > 0 || Boolean(state.activity) || state.vehicle.active;
+    fire.disabled = state.resources.ammo <= 0 || state.player.fireCooldown > 0;
+    melee.disabled = state.player.stamina < 9 || state.player.meleeCooldown > 0 || state.vehicle.active;
     heal.disabled = (state.resources.medicine <= 0 && state.inventory.fieldKit <= 0) || (state.player.health >= state.player.maxHealth && !state.player.bleeding && state.player.injury === "none");
     antidote.disabled = state.inventory.antidote <= 0 || state.player.infection <= 0;
     antidote.querySelector("small").textContent = `2 · ${state.inventory.antidote}`;
-    this.root.querySelector("#sprint-button").classList.toggle("active", state.movementMode === "sprint");
-    this.root.querySelector("#sprint-button").disabled = state.vehicle.active;
-    this.root.querySelector("#auto-fire-button").classList.toggle("active", state.autoFire);
+    const sprint = this.root.querySelector("#sprint-button");
+    const autoFire = this.root.querySelector("#auto-fire-button");
+    sprint.classList.toggle("active", state.movementMode === "sprint");
+    sprint.setAttribute("aria-pressed", String(state.movementMode === "sprint"));
+    sprint.disabled = state.vehicle.active;
+    autoFire.classList.toggle("active", state.autoFire);
+    autoFire.setAttribute("aria-pressed", String(state.autoFire));
   }
 
   renderPoiCard(state) {
@@ -530,7 +690,13 @@ export class GameUI {
     const nearby = distance <= 27 && !state.activity;
     const canClear = poi.nest?.active && nearby;
     const canScavenge = !poi.nest?.active && !poi.looted && nearby;
-    const canClaim = !poi.nest?.active && poi.looted && !poi.outpost && nearby;
+    const outpostCost = discountedCost(OUTPOST_CLAIM_COST, getEngineerReduction(state));
+    const canClaim =
+      !poi.nest?.active &&
+      poi.looted &&
+      !poi.outpost &&
+      nearby &&
+      canAfford(state.resources, outpostCost);
     const markers = [
       poi.realPlace ? '<span class="poi-tag real">LIEU RÉEL</span>' : "",
       poi.nest?.active ? `<span class="poi-tag danger">NID NIVEAU ${poi.nest.strength}</span>` : "",
@@ -554,7 +720,7 @@ export class GameUI {
         <button type="button" data-poi-id="${poi.id}" data-command="travel" class="secondary-button compact">Y aller</button>
         ${poi.nest?.active ? `<button type="button" data-action="clear-nest" class="danger-button compact" ${canClear ? "" : "disabled"}>Détruire le nid</button>` : ""}
         ${!poi.looted && !poi.nest?.active ? `<button type="button" data-action="scavenge" class="primary-button compact" ${canScavenge ? "" : "disabled"}>Fouiller</button>` : ""}
-        ${poi.looted && !poi.outpost && !poi.nest?.active ? `<button type="button" data-outpost-poi="${poi.id}" class="primary-button compact" ${canClaim ? "" : "disabled"}>Avant-poste · ${formatCost(OUTPOST_CLAIM_COST)}</button>` : ""}
+        ${poi.looted && !poi.outpost && !poi.nest?.active ? `<button type="button" data-outpost-poi="${poi.id}" class="primary-button compact" ${canClaim ? "" : "disabled"}>Avant-poste · ${formatCost(outpostCost)}</button>` : ""}
       </div>
     `;
     const close = card.querySelector('[data-action="clear-poi"]');
@@ -570,31 +736,89 @@ export class GameUI {
     const progress = Math.min(1, state.activity.elapsed / state.activity.duration);
     const poi = state.pois.find((item) => item.id === state.activity.poiId);
     const nest = state.activity.type === "clearNest";
+    const defenders = state.zombies.filter(
+      (zombie) => !zombie.dead && zombie.defenderPoiId === state.activity.poiId
+    );
+    const farthestDefender = defenders.reduce(
+      (farthest, zombie) => Math.max(farthest, distanceMeters(state.player.pos, zombie.pos)),
+      0
+    );
     card.hidden = false;
     card.innerHTML = `
       <div><small>${nest ? "DESTRUCTION DU NID" : "FOUILLE EN COURS"}</small><strong>${escapeHtml(poi?.name ?? "Zone")}</strong></div>
       <div class="activity-meter ${nest ? "danger" : ""}"><i style="width:${Math.round(progress * 100)}%"></i></div>
-      <b>${state.activity.blocked ? "MENACES À ÉLIMINER" : `${Math.ceil(state.activity.duration - state.activity.elapsed)} s`}</b>
+      <b>${state.activity.blocked ? `${defenders.length} MENACE(S) · PLUS LOIN ${formatDistance(farthestDefender)}` : `${Math.ceil(state.activity.duration - state.activity.elapsed)} s`}</b>
       <button type="button" data-action="cancel-activity" class="text-button">Interrompre</button>
     `;
   }
 
   renderNotifications(notifications) {
-    this.root.querySelector("#notifications").innerHTML = notifications.slice(0, 4).map((notification) => `
-      <button type="button" class="notification ${notification.type}" data-notification-id="${notification.id}">
-        <span></span>
-        <div><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.text)}</small></div>
-        <b>×</b>
-      </button>
-    `).join("");
+    const container = this.root.querySelector("#notifications");
+    const requested = Array.isArray(notifications) ? notifications.slice(0, 4) : [];
+    const existing = new Map(
+      [...container.querySelectorAll('[data-notification-source="state"]')]
+        .map((element) => [element.dataset.notificationId, element])
+    );
+    const desired = requested.map((notification) => {
+      const id = String(notification.id);
+      const element = existing.get(id) ?? this.createNotificationElement({ id, source: "state" });
+      existing.delete(id);
+      this.updateNotificationElement(element, notification);
+      return element;
+    });
+
+    for (const stale of existing.values()) stale.remove();
+
+    const localToasts = [...container.querySelectorAll('[data-notification-source="local"]')];
+    let cursor = localToasts.at(-1)?.nextSibling ?? container.firstChild;
+    for (const element of desired) {
+      if (element !== cursor) container.insertBefore(element, cursor);
+      cursor = element.nextSibling;
+    }
+  }
+
+  createNotificationElement({ id, source }) {
+    const element = this.root.ownerDocument.createElement("button");
+    const marker = this.root.ownerDocument.createElement("span");
+    const copy = this.root.ownerDocument.createElement("div");
+    const title = this.root.ownerDocument.createElement("strong");
+    const text = this.root.ownerDocument.createElement("small");
+    const close = this.root.ownerDocument.createElement("b");
+    element.type = "button";
+    element.className = "notification";
+    element.dataset.notificationId = id;
+    element.dataset.notificationSource = source;
+    marker.setAttribute("aria-hidden", "true");
+    close.textContent = "×";
+    close.setAttribute("aria-hidden", "true");
+    copy.append(title, text);
+    element.append(marker, copy, close);
+    return element;
+  }
+
+  updateNotificationElement(element, notification) {
+    const type = String(notification.type ?? "info").replace(/[^a-z0-9_-]/gi, "");
+    const title = String(notification.title ?? "");
+    const text = String(notification.text ?? "");
+    const className = `notification ${type || "info"}`;
+    if (element.className !== className) element.className = className;
+    const strong = element.querySelector("strong");
+    const small = element.querySelector("small");
+    if (strong.textContent !== title) strong.textContent = title;
+    if (small.textContent !== text) small.textContent = text;
+    element.setAttribute("aria-label", `${title}. ${text}. Fermer la notification.`);
   }
 
   renderTutorial(state) {
     const modal = this.root.querySelector("#tutorial-modal");
     if (!state.tutorialVisible) {
+      const active = this.root.ownerDocument?.activeElement;
+      const shouldRestoreFocus = !modal.hidden && modal.contains(active);
       modal.hidden = true;
+      if (shouldRestoreFocus) this.focusGameplaySurface();
       return;
     }
+    const wasHidden = modal.hidden;
     const step = TUTORIAL_STEPS[Math.min(state.tutorialIndex, TUTORIAL_STEPS.length - 1)];
     modal.hidden = false;
     this.root.querySelector("#tutorial-title").textContent = step.title;
@@ -602,18 +826,46 @@ export class GameUI {
     this.root.querySelector("#tutorial-progress").innerHTML = TUTORIAL_STEPS.map((_, index) => `<i class="${index <= state.tutorialIndex ? "active" : ""}"></i>`).join("");
     const next = modal.querySelector('[data-action="next-tutorial"]');
     next.textContent = state.tutorialIndex >= TUTORIAL_STEPS.length - 1 ? "Commencer →" : "Suivant →";
+    const active = this.root.ownerDocument?.activeElement;
+    if (wasHidden || !modal.contains(active)) next.focus({ preventScroll: true });
   }
 
   renderPause(state) {
-    this.root.querySelector("#pause-modal").hidden = !(state.paused && state.status === "playing");
+    const modal = this.root.querySelector("#pause-modal");
+    const visible = Boolean(
+      state.paused
+      && state.status === "playing"
+      && !state.tutorialVisible
+    );
+    if (visible) {
+      if (modal.hidden) {
+        const active = this.root.ownerDocument?.activeElement;
+        this.pauseReturnFocus = active && typeof active.focus === "function" ? active : null;
+        modal.hidden = false;
+        modal.querySelector('[data-action="resume"]')?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    const active = this.root.ownerDocument?.activeElement;
+    const shouldRestoreFocus = !modal.hidden && modal.contains(active);
+    modal.hidden = true;
+    if (shouldRestoreFocus) {
+      if (this.pauseReturnFocus?.isConnected) this.pauseReturnFocus.focus({ preventScroll: true });
+      else this.focusGameplaySurface();
+    }
+    this.pauseReturnFocus = null;
   }
 
   renderGameOver(state) {
     const modal = this.root.querySelector("#gameover-modal");
     if (state.status !== "gameover") {
+      const active = this.root.ownerDocument?.activeElement;
+      const shouldRestoreFocus = !modal.hidden && modal.contains(active);
       modal.hidden = true;
+      if (shouldRestoreFocus) this.focusGameplaySurface();
       return;
     }
+    const wasHidden = modal.hidden;
     modal.hidden = false;
     const reason = state.player.infection >= 100
       ? "La contamination est irréversible"
@@ -622,16 +874,28 @@ export class GameUI {
         : "La base a été détruite";
     this.root.querySelector("#gameover-title").textContent = reason;
     this.root.querySelector("#gameover-stats").innerHTML = this.renderEndStats(state);
+    if (wasHidden) modal.querySelector('[data-action="restart"]')?.focus({ preventScroll: true });
   }
 
   renderVictory(state) {
     const modal = this.root.querySelector("#victory-modal");
     if (state.status !== "victory") {
+      const active = this.root.ownerDocument?.activeElement;
+      const shouldRestoreFocus = !modal.hidden && modal.contains(active);
       modal.hidden = true;
+      if (shouldRestoreFocus) this.focusGameplaySurface();
       return;
     }
+    const wasHidden = modal.hidden;
     modal.hidden = false;
     this.root.querySelector("#victory-stats").innerHTML = this.renderEndStats(state);
+    if (wasHidden) modal.querySelector('[data-action="restart"]')?.focus({ preventScroll: true });
+  }
+
+  focusGameplaySurface() {
+    const target = this.mapRoot?.querySelector?.("canvas") ??
+      this.root.querySelector('[data-action="pause"]');
+    target?.focus({ preventScroll: true });
   }
 
   renderEndStats(state) {
@@ -665,6 +929,8 @@ export class GameUI {
     const baseRatio = base.health / base.maxHealth;
     const wallRatio = base.wallMaxHealth > 0 ? base.wallHealth / base.wallMaxHealth : 0;
     const campaign = state.campaign;
+    const engineerReduction = getEngineerReduction(state);
+    const beaconCost = discountedCost(EVACUATION_BEACON_COST, engineerReduction);
     const hasProtocol = state.research.unlocked.includes("evacuationProtocol");
     const canBuildBeacon = state.player.atBase && campaign.signalParts >= campaign.requiredSignalParts && base.structures.radio >= 2 && hasProtocol && !campaign.beaconBuilt;
     const canCall = state.player.atBase && campaign.beaconBuilt && !campaign.evacuationCalled && !state.wave.active && !isNight(state.totalMinutes);
@@ -678,7 +944,7 @@ export class GameUI {
           <span class="${base.structures.radio >= 2 ? "done" : ""}">Radio Niv. 2</span>
           <span class="${hasProtocol ? "done" : ""}">Protocole</span>
         </div>
-        ${!campaign.beaconBuilt ? `<button type="button" data-action="build-beacon" class="primary-button" ${canBuildBeacon ? "" : "disabled"}>Construire la balise · ${formatCost(EVACUATION_BEACON_COST)}</button>` : ""}
+        ${!campaign.beaconBuilt ? `<button type="button" data-action="build-beacon" class="primary-button" ${canBuildBeacon && canAfford(state.resources, beaconCost) ? "" : "disabled"}>Construire la balise · ${formatCost(beaconCost)}</button>` : ""}
         ${campaign.beaconBuilt && !campaign.evacuationCalled ? `<button type="button" data-action="call-evacuation" class="danger-button" ${canCall ? "" : "disabled"}>Appeler l’évacuation — déclenche le siège final</button>` : ""}
       </section>
       <section class="base-overview">
@@ -697,7 +963,10 @@ export class GameUI {
         ${Object.entries(STRUCTURES).map(([id, definition]) => {
           const level = base.structures[id] ?? 0;
           const maxed = level >= definition.maxLevel;
-          const cost = maxed ? null : definition.costs[level];
+          const baseCost = maxed ? null : definition.costs[level];
+          const cost = baseCost
+            ? discountedCost(baseCost, id === "workshop" ? 0 : engineerReduction)
+            : null;
           const affordable = cost ? canAfford(state.resources, cost) : false;
           return `
             <article class="structure-card ${maxed ? "maxed" : ""}">
@@ -723,7 +992,12 @@ export class GameUI {
         if (a.looted !== b.looted) return a.looted ? 1 : -1;
         return distanceMeters(state.player.pos, a.pos) - distanceMeters(state.player.pos, b.pos);
       });
-    const scouts = state.base.roster.filter((survivor) => survivor.role === "scout" && survivor.health > 20).length;
+    const scouts = state.base.roster.filter((survivor) =>
+      survivor.role === "scout" &&
+      survivor.health > 20 &&
+      survivor.morale > 20 &&
+      !survivor.injured
+    ).length;
     const radioRange = 1450 + state.base.structures.radio * 350 + scouts * 90 + (state.research.unlocked.includes("radioNetwork") ? 320 : 0);
     this.panelContent.innerHTML = `
       <div class="panel-title"><div><small>CARTE TACTIQUE</small><h2>Expéditions</h2></div><span>${pois.filter((poi) => !poi.looted || poi.nest?.active).length} zones actives · ${state.pois.filter((poi) => poi.realPlace).length} réelles</span></div>
@@ -768,20 +1042,40 @@ export class GameUI {
 
   renderWorkshopPanel(state) {
     const vehicle = state.vehicle;
-    const vehicleCost = VEHICLE_DEFINITION.repairCost;
+    const engineerReduction = getEngineerReduction(state);
+    const vehicleCost = discountedCost(VEHICLE_DEFINITION.repairCost, engineerReduction);
+    const vehicleDistance = distanceMeters(state.player.pos, vehicle.pos);
+    const canUseRepairKit =
+      state.inventory.repairKit > 0 &&
+      (
+        (
+          vehicle.repaired &&
+          !vehicle.active &&
+          vehicle.condition < vehicle.maxCondition &&
+          vehicleDistance <= VEHICLE_INTERACTION_RANGE_METERS
+        ) ||
+        (
+          state.player.atBase &&
+          (
+            (state.base.wallMaxHealth > 0 && state.base.wallHealth < state.base.wallMaxHealth) ||
+            state.base.health < state.base.maxHealth
+          )
+        )
+      );
     this.panelContent.innerHTML = `
       <div class="panel-title"><div><small>FABRICATION & LOGISTIQUE</small><h2>Atelier de survie</h2></div><span>Niveau ${state.base.structures.workshop}</span></div>
       <div class="inventory-grid">
         <div><span>✚ Kits terrain</span><b>${state.inventory.fieldKit}</b><button type="button" data-action="use-field-kit" ${state.inventory.fieldKit <= 0 ? "disabled" : ""}>UTILISER</button></div>
-        <div><span>⚒ Kits réparation</span><b>${state.inventory.repairKit}</b><button type="button" data-action="repair-vehicle-kit" ${state.inventory.repairKit <= 0 || !vehicle.repaired || vehicle.condition >= vehicle.maxCondition ? "disabled" : ""}>RÉPARER</button></div>
+        <div><span>⚒ Kits réparation</span><b>${state.inventory.repairKit}</b><button type="button" data-action="repair-vehicle-kit" ${canUseRepairKit ? "" : "disabled"}>RÉPARER</button></div>
         <div><span>◇ Pièges stockés</span><b>${state.inventory.trap}</b><button type="button" data-action="deploy-trap" ${state.inventory.trap <= 0 || !state.player.atBase ? "disabled" : ""}>DÉPLOYER</button></div>
         <div><span>⌬ Antidotes</span><b>${state.inventory.antidote}</b><button type="button" data-action="antidote" ${state.inventory.antidote <= 0 || state.player.infection <= 0 ? "disabled" : ""}>INJECTER</button></div>
       </div>
       <article class="vehicle-card ${vehicle.active ? "active" : ""}">
         <div class="vehicle-visual">▰</div>
-        <div><small>VÉHICULE D’EXPÉDITION</small><strong>${escapeHtml(VEHICLE_DEFINITION.label)}</strong><p>${!vehicle.discovered ? "Localisez l’épave grâce à la transmission radio." : !vehicle.repaired ? "L’épave est revenue à la base. Recherchez la mécanique puis réparez-la." : `État ${Math.round(vehicle.condition)} % · ${formatDistance(vehicle.distanceTravelled)} parcourus`}</p></div>
+        <div><small>VÉHICULE D’EXPÉDITION</small><strong>${escapeHtml(VEHICLE_DEFINITION.label)}</strong><p>${!vehicle.discovered ? "Localisez l’épave grâce à la transmission radio." : !vehicle.repaired ? "L’épave est revenue à la base. Recherchez la mécanique puis réparez-la." : `État ${Math.round(vehicle.condition)} % · garé à ${formatDistance(vehicleDistance)} · ${formatDistance(vehicle.distanceTravelled)} parcourus`}</p></div>
         <div class="vehicle-actions">
           ${vehicle.discovered && !vehicle.repaired ? `<button type="button" data-action="repair-vehicle" class="primary-button compact" ${!state.player.atBase || !state.research.unlocked.includes("mechanics") || !canAfford(state.resources, vehicleCost) ? "disabled" : ""}>Réparer · ${formatCost(vehicleCost)}</button>` : ""}
+          ${vehicle.repaired && !vehicle.active && vehicleDistance > VEHICLE_INTERACTION_RANGE_METERS ? `<button type="button" data-action="return-vehicle" class="secondary-button compact">Rejoindre · ${formatDistance(vehicleDistance)}</button>` : ""}
           ${vehicle.repaired ? `<button type="button" data-action="toggle-vehicle" class="${vehicle.active ? "danger-button" : "primary-button"} compact" ${vehicle.condition <= 0 || (!vehicle.active && state.resources.fuel <= 0) ? "disabled" : ""}>${vehicle.active ? "Arrêter" : "Démarrer"} · V</button>` : ""}
         </div>
       </article>
@@ -791,8 +1085,9 @@ export class GameUI {
           const researchId = "research" in recipe ? recipe.research : null;
           const workshopOk = state.base.structures.workshop >= recipe.minWorkshop;
           const researchOk = !researchId || state.research.unlocked.includes(researchId);
-          const affordable = canAfford(state.resources, recipe.cost);
-          return `<article class="recipe-card ${workshopOk && researchOk ? "" : "locked"}"><span>${recipe.icon}</span><div><strong>${escapeHtml(recipe.label)}</strong><small>${escapeHtml(recipe.description)}</small><em>${!workshopOk ? `Atelier niveau ${recipe.minWorkshop} requis` : !researchOk ? `Recherche ${escapeHtml(RESEARCH_TECHS[researchId]?.label ?? researchId)}` : formatCost(recipe.cost)}</em></div><button type="button" data-recipe-id="${id}" ${!state.player.atBase || !workshopOk || !researchOk || !affordable ? "disabled" : ""}>FABRIQUER</button></article>`;
+          const cost = discountedCost(recipe.cost, engineerReduction * 0.5);
+          const affordable = canAfford(state.resources, cost);
+          return `<article class="recipe-card ${workshopOk && researchOk ? "" : "locked"}"><span>${recipe.icon}</span><div><strong>${escapeHtml(recipe.label)}</strong><small>${escapeHtml(recipe.description)}</small><em>${!workshopOk ? `Atelier niveau ${recipe.minWorkshop} requis` : !researchOk ? `Recherche ${escapeHtml(RESEARCH_TECHS[researchId]?.label ?? researchId)}` : formatCost(cost)}</em></div><button type="button" data-recipe-id="${id}" ${!state.player.atBase || !workshopOk || !researchOk || !affordable ? "disabled" : ""}>FABRIQUER</button></article>`;
         }).join("")}
       </div>
     `;
@@ -855,41 +1150,109 @@ export class GameUI {
   openSettings() {
     const modal = this.root.querySelector("#settings-modal");
     const settings = this.settings ?? {};
-    this.root.querySelector("#google-key-input").value = settings.googleMapsApiKey ?? "";
+    const state = this.latestGameState;
+    if (modal.hidden) {
+      const active = this.root.ownerDocument?.activeElement;
+      this.settingsReturnFocus = active && typeof active.focus === "function" ? active : null;
+      this.settingsPausedGame = Boolean(
+        this.phase === "game"
+        && state?.status === "playing"
+        && !state.paused
+        && !state.tutorialVisible
+      );
+      if (this.settingsPausedGame) this.callbacks.pause?.();
+    }
+    const keyInput = this.root.querySelector("#google-key-input");
+    const keyToggle = this.root.querySelector('[data-action="toggle-key"]');
+    keyInput.value = settings.googleMapsApiKey ?? "";
+    keyInput.type = "password";
+    keyToggle.setAttribute("aria-label", "Afficher la clé");
+    keyToggle.setAttribute("aria-pressed", "false");
     this.root.querySelector("#sound-setting").checked = settings.soundEnabled !== false;
     this.root.querySelector("#motion-setting").checked = settings.reducedMotion === true;
     modal.hidden = false;
+    keyInput.focus({ preventScroll: true });
   }
 
-  closeSettings() {
+  isSettingsOpen() {
+    return !this.root.querySelector("#settings-modal").hidden;
+  }
+
+  closeSettings({ restoreFocus = true } = {}) {
+    const state = this.latestGameState;
+    const shouldResume = Boolean(
+      this.settingsPausedGame
+      && this.phase === "game"
+      && state?.status === "playing"
+      && !state.tutorialVisible
+    );
+    this.settingsPausedGame = false;
     this.root.querySelector("#settings-modal").hidden = true;
+    if (shouldResume) this.callbacks.resume?.();
+    if (restoreFocus && this.settingsReturnFocus?.isConnected) {
+      this.settingsReturnFocus.focus({ preventScroll: true });
+    }
+    this.settingsReturnFocus = null;
   }
 
-  saveSettingsFromForm() {
+  async saveSettingsFromForm() {
     const nextSettings = {
       ...(this.settings ?? {}),
       googleMapsApiKey: this.root.querySelector("#google-key-input").value.trim(),
       soundEnabled: this.root.querySelector("#sound-setting").checked,
       reducedMotion: this.root.querySelector("#motion-setting").checked
     };
-    this.callbacks.saveSettings?.(nextSettings);
+    await this.callbacks.saveSettings?.(nextSettings);
     this.closeSettings();
   }
 
   toggleKeyVisibility() {
     const input = this.root.querySelector("#google-key-input");
+    const button = this.root.querySelector('[data-action="toggle-key"]');
     input.type = input.type === "password" ? "text" : "password";
+    button.setAttribute("aria-label", input.type === "password" ? "Afficher la clé" : "Masquer la clé");
+    button.setAttribute("aria-pressed", String(input.type === "text"));
+  }
+
+  requestLocationConsent() {
+    if (this.locationConsentPromise) return this.locationConsentPromise;
+    const modal = this.root.querySelector("#location-consent-modal");
+    const active = this.root.ownerDocument?.activeElement;
+    this.locationConsentReturnFocus = active && typeof active.focus === "function" ? active : null;
+    this.locationConsentPromise = new Promise((resolve) => {
+      this.locationConsentResolver = resolve;
+    });
+    modal.hidden = false;
+    modal.querySelector('[data-action="allow-location-consent"]').focus({ preventScroll: true });
+    return this.locationConsentPromise;
+  }
+
+  isLocationConsentOpen() {
+    return !this.root.querySelector("#location-consent-modal").hidden;
+  }
+
+  resolveLocationConsent(allowed) {
+    const modal = this.root.querySelector("#location-consent-modal");
+    const resolve = this.locationConsentResolver;
+    modal.hidden = true;
+    this.locationConsentResolver = null;
+    this.locationConsentPromise = null;
+    resolve?.(Boolean(allowed));
+    if (this.locationConsentReturnFocus?.isConnected) {
+      this.locationConsentReturnFocus.focus({ preventScroll: true });
+    }
+    this.locationConsentReturnFocus = null;
   }
 
   showToast(type, title, text) {
-    const id = `local-${Date.now()}`;
+    const id = `local-${Date.now()}-${this.localToastCounter++}`;
     const container = this.root.querySelector("#notifications");
-    const element = document.createElement("button");
-    element.type = "button";
-    element.className = `notification ${type}`;
-    element.dataset.notificationId = id;
-    element.innerHTML = `<span></span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></div><b>×</b>`;
-    element.addEventListener("click", () => element.remove());
+    const element = this.createNotificationElement({ id, source: "local" });
+    this.updateNotificationElement(element, { type, title, text });
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      element.remove();
+    });
     container.prepend(element);
     window.setTimeout(() => element.remove(), 6500);
   }
@@ -907,6 +1270,25 @@ function formatCost(cost) {
 
 function canAfford(resources, cost) {
   return Object.entries(cost ?? {}).every(([resource, amount]) => (resources[resource] ?? 0) >= amount);
+}
+
+function getEngineerReduction(state) {
+  const activeEngineers = state.base.roster.filter((survivor) =>
+    survivor.role === "engineer" &&
+    survivor.health > 20 &&
+    survivor.morale > 20 &&
+    !survivor.injured
+  ).length;
+  return Math.min(0.24, activeEngineers * 0.04 + state.base.structures.workshop * 0.025);
+}
+
+function discountedCost(cost, discount = 0) {
+  return Object.fromEntries(
+    Object.entries(cost ?? {}).map(([resource, amount]) => [
+      resource,
+      Math.max(1, Math.ceil(amount * (1 - Math.max(0, Math.min(0.45, discount)))))
+    ])
+  );
 }
 
 function formatGameDuration(minutes) {

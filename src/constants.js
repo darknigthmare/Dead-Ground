@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.0.0";
+export const APP_VERSION = "2.0.1";
 export const GAME_VERSION = 2;
 export const SAVE_KEY = "dead-ground-save-v2";
 export const BACKUP_SAVE_KEY = "dead-ground-save-v2-backup";
@@ -11,6 +11,7 @@ export const MINUTES_PER_REAL_SECOND = 2.4;
 export const BASE_RADIUS_METERS = 34;
 export const MAX_LOG_ENTRIES = 140;
 export const CAMPAIGN_SIGNAL_PARTS_REQUIRED = 3;
+export const VEHICLE_INTERACTION_RANGE_METERS = 48;
 
 export const DIFFICULTIES = Object.freeze({
   easy: {
@@ -573,6 +574,13 @@ export const VEHICLE_DEFINITION = Object.freeze({
   fuelPerKilometer: 1.65,
   damageReduction: 0.55,
   repairCost: { metal: 18, parts: 8, fuel: 4 }
+});
+
+export const WAVE_RECOVERY_REWARDS = Object.freeze({
+  metalBase: 3,
+  metalDayFactor: 0.75,
+  fuelBase: 1,
+  fuelEveryDays: 3
 });
 
 export const OUTPOST_CLAIM_COST = Object.freeze({ wood: 12, metal: 6, parts: 1 });

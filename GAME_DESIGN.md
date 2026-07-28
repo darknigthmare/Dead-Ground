@@ -19,7 +19,7 @@ La base, les POI, les trajectoires, les avant-postes et les infectés utilisent 
 
 ### Monde hybride
 
-Les établissements Google compatibles deviennent des objectifs. Le générateur procédural complète les zones vides et garantit toujours un nombre jouable de POI. Les noms et adresses sont affichés comme informations de lieu ; le jeu n’invente aucune donnée personnelle.
+Les points géographiques Google compatibles deviennent des objectifs sous un alias tactique fictif. Le générateur procédural complète les zones vides et garantit toujours un nombre jouable de POI. Aucun nom, adresse ou type descriptif Google n’est demandé ni conservé.
 
 ### Préparation contre urgence
 

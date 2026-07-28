@@ -14,7 +14,7 @@ test("convertit les catégories Google en catégories de jeu", () => {
   assert.equal(mapGooglePlaceType("unknown", ["hardware_store"]), "hardware");
 });
 
-test("normalise les lieux Google et conserve leurs métadonnées", () => {
+test("normalise les lieux Google en objectifs fictifs sans conserver leur contenu descriptif", () => {
   const places = normalizeGooglePlaces([
     {
       id: "pharma-1",
@@ -28,11 +28,15 @@ test("normalise les lieux Google et conserve leurs métadonnées", () => {
   ], START);
 
   assert.equal(places.length, 1);
-  assert.equal(places[0].type, "pharmacy");
-  assert.equal(places[0].name, "Pharmacie du Port");
+  assert.ok(places[0].type);
+  assert.doesNotMatch(places[0].name, /Pharmacie du Port/);
   assert.equal(places[0].realPlace, true);
   assert.equal(places[0].source, "google-places");
-  assert.match(places[0].address, /Marseille/);
+  assert.equal(places[0].placeId, "pharma-1");
+  assert.equal("address" in places[0], false);
+  assert.equal("googleTypes" in places[0], false);
+  assert.equal("googleMapsURI" in places[0], false);
+  assert.ok(places[0].googleExpiresAt > places[0].googleFetchedAt);
 });
 
 test("crée un monde hybride complété par des lieux procéduraux", () => {

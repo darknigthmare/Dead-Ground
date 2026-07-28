@@ -1,4 +1,4 @@
-# Reprise du projet avec Codex — Dead Ground 2.0.0
+# Reprise du projet avec Codex — Dead Ground 2.0.1
 
 ## Mission
 
@@ -23,7 +23,7 @@ La version 2.0 est jouable de l’installation jusqu’à la victoire et compren
 - campagne d’évacuation et siège final ;
 - sauvegardes principales/secondaires, migration 1.x, import/export ;
 - PWA responsive ;
-- **48 tests** et simulation longue de six jours.
+- suite automatisée moteur, migration, stockage, rendu et UI, plus une simulation longue de six jours.
 
 ## Commande obligatoire avant livraison
 
@@ -31,7 +31,7 @@ La version 2.0 est jouable de l’installation jusqu’à la victoire et compren
 npm run validate
 ```
 
-L’audit statique complémentaire se lance avec `npm run check:types` lorsqu’un exécutable TypeScript `tsc` est disponible.
+L’audit statique TypeScript est inclus dans `npm run validate` et se relance avec `npm run check:types`.
 
 Une modification visuelle doit aussi être contrôlée en :
 
@@ -54,6 +54,8 @@ Une modification visuelle doit aussi être contrôlée en :
 10. Toute modification du schéma de sauvegarde reçoit une migration et une validation.
 11. Préserver la copie de secours et la récupération d’une sauvegarde principale corrompue.
 12. Limiter les collections longues : zombies 125, logs 140, historique de missions 30.
+13. Ne demander à Places que `id` et `location`, ne pas persister de contenu descriptif Google et limiter les coordonnées Google à 30 jours.
+14. Préserver le consentement explicite avant toute demande de géolocalisation.
 
 ## Carte des fichiers
 
@@ -117,5 +119,5 @@ Une modification visuelle doit aussi être contrôlée en :
 ## Prompt prêt à donner à Codex
 
 ```text
-Travaille directement dans ce dépôt Dead Ground: Satellite Survival 2.0.0. Lis README.md, GAME_DESIGN.md, CODEX_HANDOFF.md et QA_REPORT.md avant de modifier le code. Implémente réellement la fonctionnalité demandée et préserve le mode Google Maps satellite, Google Places et le terrain procédural de secours. Ne télécharge jamais les tuiles Google, ne masque pas les attributions et ne place aucune clé non restreinte dans le dépôt. Garde GameEngine indépendant de la carte et toutes les entités en latitude/longitude. Ajoute les migrations nécessaires, les tests ciblés et un test de régression. Exécute npm run validate, vérifie 1440×1000 et 390×844, puis documente précisément les fichiers, règles et limites restantes.
+Travaille directement dans ce dépôt Dead Ground: Satellite Survival 2.0.1. Lis README.md, GAME_DESIGN.md, CODEX_HANDOFF.md et QA_REPORT.md avant de modifier le code. Implémente réellement la fonctionnalité demandée et préserve le mode Google Maps satellite, Google Places et le terrain procédural de secours. Ne télécharge jamais les tuiles Google, ne masque pas les attributions et ne place aucune clé non restreinte dans le dépôt. Garde GameEngine indépendant de la carte et toutes les entités en latitude/longitude. Ajoute les migrations nécessaires, les tests ciblés et un test de régression. Exécute npm run validate, vérifie 1440×1000 et 390×844, puis documente précisément les fichiers, règles et limites restantes.
 ```

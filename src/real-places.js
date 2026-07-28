@@ -2,6 +2,8 @@ import { POI_TYPES } from "./constants.js";
 import { distanceMeters } from "./geo.js";
 import { mulberry32, randomInt, seedFromLocation } from "./rng.js";
 
+export const GOOGLE_PLACE_COORDINATE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 // Uniquement des types de la Table A de Places API (New), donc utilisables
 // dans includedPrimaryTypes de Place.searchNearby.
 export const REAL_PLACE_SEARCH_TYPES = Object.freeze([
@@ -73,6 +75,7 @@ const TYPE_PRIORITY = Object.freeze({
   hotel: "house",
   lodging: "house"
 });
+const GAME_POI_TYPE_IDS = Object.freeze(Object.keys(POI_TYPES));
 
 export function mapGooglePlaceType(primaryType, types = []) {
   const candidates = [primaryType, ...types].filter(Boolean);
@@ -93,21 +96,22 @@ export function normalizeGooglePlaces(rawPlaces, origin, { maxCount = 22 } = {})
     const distance = distanceMeters(origin, pos);
     if (distance < 70 || distance > 1700) continue;
 
-    const externalId = String(raw.id || raw.placeId || `${pos.lat.toFixed(6)},${pos.lng.toFixed(6)}`);
+    const externalId = String(raw.id || raw.placeId || "").trim();
+    if (!externalId) continue;
     if (seenIds.has(externalId)) continue;
     if (seenPositions.some((item) => distanceMeters(item, pos) < 22)) continue;
 
-    const type = mapGooglePlaceType(raw.primaryType, raw.types);
+    const placeHash = hashString(externalId);
+    const type = GAME_POI_TYPE_IDS[placeHash % GAME_POI_TYPE_IDS.length];
     const config = POI_TYPES[type] ?? POI_TYPES.house;
-    const ringDanger = distance > 1000 ? 1 : 0;
-    const deterministicRandom = mulberry32((seedFromLocation(pos) ^ hashString(externalId)) >>> 0);
-    const danger = Math.max(1, Math.min(5, config.danger + ringDanger + randomInt(deterministicRandom, 0, 1)));
-    const displayName = readDisplayName(raw.displayName) || config.label;
+    const deterministicRandom = mulberry32((seedFromLocation(origin) ^ placeHash) >>> 0);
+    const danger = Math.max(1, Math.min(5, config.danger + randomInt(deterministicRandom, 0, 1)));
+    const fetchedAt = Date.now();
 
     normalized.push({
-      id: `real-${safeId(externalId)}`,
+      id: `real-${safeId(externalId).slice(0, 76)}-${placeHash.toString(36)}`,
       type,
-      name: displayName,
+      name: `${config.label} — site réel ${normalized.length + 1}`,
       pos,
       danger,
       looted: false,
@@ -118,13 +122,9 @@ export function normalizeGooglePlaces(rawPlaces, origin, { maxCount = 22 } = {})
       source: "google-places",
       realPlace: true,
       placeId: externalId,
-      externalId,
-      googlePrimaryType: raw.primaryType || null,
-      primaryType: raw.primaryType || null,
-      googleTypes: Array.isArray(raw.types) ? raw.types.slice(0, 24) : [],
-      address: raw.formattedAddress || "",
-      googleMapsURI: raw.googleMapsURI || "",
-      distanceFromBase: Math.round(distance),
+      googleFetchedAt: fetchedAt,
+      googleExpiresAt: fetchedAt + GOOGLE_PLACE_COORDINATE_TTL_MS,
+      sortDistance: Math.round(distance),
       outpost: false,
       campaignSignalPart: false,
       signalPartCollected: false,
@@ -137,7 +137,9 @@ export function normalizeGooglePlaces(rawPlaces, origin, { maxCount = 22 } = {})
     if (normalized.length >= maxCount) break;
   }
 
-  return normalized.sort((a, b) => a.distanceFromBase - b.distanceFromBase);
+  return normalized
+    .sort((a, b) => a.sortDistance - b.sortDistance)
+    .map(({ sortDistance: _sortDistance, ...poi }) => poi);
 }
 
 function readPosition(location) {
@@ -148,11 +150,6 @@ function readPosition(location) {
   const lat = Number(location.lat ?? location.latitude);
   const lng = Number(location.lng ?? location.longitude);
   return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
-}
-
-function readDisplayName(displayName) {
-  if (typeof displayName === "string") return displayName.trim();
-  return String(displayName?.text ?? "").trim();
 }
 
 function safeId(value) {

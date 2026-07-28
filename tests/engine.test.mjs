@@ -12,6 +12,24 @@ function createEngine(difficultyId = "normal") {
   return { state, engine: new GameEngine(state) };
 }
 
+function createAllHousePois(count = 22) {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `real-house-${index + 1}`,
+    type: "house",
+    name: `Maison réelle ${index + 1}`,
+    pos: destinationPoint(
+      START,
+      (index / count) * Math.PI * 2,
+      280 + (index % 4) * 210
+    ),
+    danger: 1,
+    currentThreat: 1,
+    lootSeed: index + 1,
+    source: "google-places",
+    realPlace: true
+  }));
+}
+
 test("crée une partie avec une base, des ressources et des lieux", () => {
   const { state } = createEngine();
   assert.equal(state.status, "playing");
@@ -91,12 +109,75 @@ test("déclenche la vague nocturne au passage de 20 h", () => {
   assert.ok(state.wave.queued > 0 || state.wave.spawned > 0);
 });
 
-test("termine la partie lorsque la base tombe", () => {
+test("une vague active n’est jamais remplacée au passage de 20 h suivant", () => {
   const { state, engine } = createEngine();
+  engine.startNightWave(1);
+  assert.equal(state.wave.number, 1);
+  state.totalMinutes = 1440 + 1199.5;
+  engine.step(0.25);
+  assert.equal(state.wave.active, true);
+  assert.equal(state.wave.number, 1);
+  assert.equal(state.wave.announcedDay, 1);
+});
+
+test("la récupération de vague renouvelle toutes les ressources critiques, même sur seed 1 et un monde de maisons", () => {
+  const procedural = createInitialState({ start: START, difficultyId: "normal", seed: 1 });
+  const allHouses = createInitialState({
+    start: START,
+    difficultyId: "normal",
+    seed: 1,
+    realPois: createAllHousePois()
+  });
+  assert.equal(allHouses.pois.every((poi) => poi.type === "house"), true);
+
+  for (const state of [procedural, allHouses]) {
+    const engine = new GameEngine(state);
+    for (const resource of ["ammo", "parts", "metal", "fuel", "intel"]) {
+      state.resources[resource] = 0;
+    }
+    engine.startNightWave(1);
+    engine.completeWave();
+    const firstRecovery = Object.fromEntries(
+      ["ammo", "parts", "metal", "fuel", "intel"].map((resource) => [resource, state.resources[resource]])
+    );
+    for (const amount of Object.values(firstRecovery)) assert.ok(amount > 0);
+
+    engine.startNightWave(2);
+    engine.completeWave();
+    for (const [resource, amount] of Object.entries(firstRecovery)) {
+      assert.ok(state.resources[resource] > amount, `${resource} doit être récupérable après chaque vague`);
+    }
+  }
+});
+
+test("termine la partie lorsque la base tombe", () => {
+  const state = createInitialState({ start: START, difficultyId: "normal", seed: 123456 });
+  let autosaves = 0;
+  const engine = new GameEngine(state, {
+    onAutosave() {
+      autosaves += 1;
+    }
+  });
   state.base.health = 0;
   engine.step(0.1);
   assert.equal(state.status, "gameover");
   assert.equal(state.paused, true);
+  assert.equal(autosaves, 1, "l’état terminal doit être sauvegardé immédiatement");
+});
+
+test("sauvegarde immédiatement la victoire de campagne", () => {
+  const state = createInitialState({ start: START, difficultyId: "normal", seed: 123456 });
+  let autosaves = 0;
+  const engine = new GameEngine(state, {
+    onAutosave() {
+      autosaves += 1;
+    }
+  });
+  state.wave.active = true;
+  state.wave.final = true;
+  engine.completeWave();
+  assert.equal(state.status, "victory");
+  assert.equal(autosaves, 1);
 });
 
 test("la pause bloque les commandes qui modifieraient encore la simulation", () => {

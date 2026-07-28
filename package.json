@@ -1,19 +1,23 @@
 {
   "name": "dead-ground-satellite-survival",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "private": true,
   "type": "module",
   "description": "Jeu de survie zombie géolocalisé avec lieux réels, communauté, missions, recherche, véhicules, avant-postes et campagne d’évacuation.",
   "scripts": {
-    "dev": "python3 -m http.server 4173",
+    "dev": "node scripts/serve.mjs",
+    "preview": "node scripts/serve.mjs --dist",
     "build": "node scripts/build.mjs",
     "test": "node --test",
-    "check": "node --check src/*.js src/maps/*.js scripts/*.mjs tests/*.mjs",
+    "check": "node scripts/check-syntax.mjs",
+    "check:types": "tsc -p tsconfig.audit.json",
     "validate:static": "node scripts/validate-build.mjs",
-    "validate": "npm run check && npm test && npm run build && npm run validate:static",
-    "check:types": "tsc -p tsconfig.audit.json"
+    "validate": "npm run check && npm run check:types && npm test && npm run build && npm run validate:static"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
   }
 }

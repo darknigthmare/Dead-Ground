@@ -36,6 +36,26 @@ function weakZombie(pos, type = "walker", wave = false) {
   };
 }
 
+function defeatPoiDefendersWithPlayerCommands(state, engine, poiId) {
+  state.resources.ammo = Math.max(state.resources.ammo, 999);
+  state.player.health = state.player.maxHealth = 1_000_000;
+  state.timers.ambientSpawn = 1_000_000;
+  state.timers.nestSpawn = 1_000_000;
+  for (
+    let step = 0;
+    step < 600 && state.zombies.some((zombie) => !zombie.dead && zombie.defenderPoiId === poiId);
+    step += 1
+  ) {
+    if (state.player.fireCooldown <= 0) engine.fire();
+    engine.step(0.25);
+  }
+  assert.equal(
+    state.zombies.some((zombie) => !zombie.dead && zombie.defenderPoiId === poiId),
+    false,
+    "les commandes de tir doivent permettre d’éliminer tous les défenseurs pendant l’activité"
+  );
+}
+
 test("mise à jour majeure 1 — la météo change et modifie réellement la vitesse", () => {
   const clear = createEngine(101);
   const storm = createEngine(101);
@@ -151,11 +171,83 @@ test("mise à jour majeure 7 — un nid niveau 3 génère les nouvelles mutation
   assert.equal(engine.beginClearNest(), true);
   assert.ok(state.zombies.some((zombie) => zombie.type === "spitter"));
   assert.ok(state.zombies.some((zombie) => zombie.type === "armored"));
-  for (const zombie of state.zombies) zombie.dead = true;
-  engine.updateActivity(state.activity.duration + 0.1);
+  defeatPoiDefendersWithPlayerCommands(state, engine, poi.id);
+  for (let step = 0; step < 80 && state.activity; step += 1) engine.step(0.25);
   assert.equal(poi.nest.active, false);
   assert.equal(state.nestsCleared, 1);
   assert.ok(state.resources.intel > 1);
+});
+
+test("assaut de lieu — tir, mêlée et autofire restent disponibles sans contourner les défenseurs", () => {
+  const { state, engine } = createEngine(10_701);
+  const poi = state.pois.find((item) => !item.nest?.active && !item.looted);
+  assert.ok(poi);
+  state.player.pos = { ...poi.pos };
+  state.player.atBase = false;
+  state.selectedPoiId = poi.id;
+  state.resources.ammo = 999;
+  state.player.health = state.player.maxHealth = 1_000_000;
+  state.timers.ambientSpawn = 1_000_000;
+  state.timers.nestSpawn = 1_000_000;
+
+  const meleeTarget = weakZombie(destinationPoint(poi.pos, 0, 2));
+  state.zombies.push(meleeTarget);
+  assert.equal(engine.beginScavenge(), true);
+  assert.equal(state.activity.blocked, true);
+  assert.equal(engine.melee(), true, "la mêlée doit rester autorisée pendant une fouille");
+  assert.equal(meleeTarget.dead, true);
+
+  const ammoBeforeManualShot = state.resources.ammo;
+  assert.equal(engine.fire(), true, "le tir manuel doit rester autorisé pendant une fouille");
+  assert.equal(state.resources.ammo, ammoBeforeManualShot - 1);
+  const elapsedWhileDefended = state.activity.elapsed;
+  engine.step(0.25);
+  assert.equal(state.activity.elapsed, elapsedWhileDefended, "la fouille doit rester suspendue tant qu’un défenseur associé vit");
+
+  assert.equal(engine.toggleAutoFire(), true);
+  const ammoBeforeAutoFire = state.resources.ammo;
+  for (let step = 0; step < 8 && state.resources.ammo === ammoBeforeAutoFire; step += 1) {
+    engine.step(0.25);
+  }
+  assert.ok(state.resources.ammo < ammoBeforeAutoFire, "l’autofire doit engager les défenseurs pendant l’activité");
+  assert.equal(engine.toggleAutoFire(), true);
+  defeatPoiDefendersWithPlayerCommands(state, engine, poi.id);
+  const unrelated = weakZombie(destinationPoint(poi.pos, 0, 2));
+  state.zombies.push(unrelated);
+  for (let step = 0; step < 80 && state.activity; step += 1) engine.step(0.25);
+  assert.equal(poi.looted, true, "la fouille doit reprendre dès que ses propres défenseurs sont éliminés");
+  assert.equal(unrelated.dead, false, "un infecté non associé ne doit pas bloquer la fouille");
+});
+
+test("assaut de nid — annuler puis reprendre ne duplique pas les défenseurs associés", () => {
+  const { state, engine } = createEngine(10_702);
+  const poi = state.pois.find((item) => item.nest?.active);
+  assert.ok(poi);
+  state.player.pos = { ...poi.pos };
+  state.player.atBase = false;
+  state.selectedPoiId = poi.id;
+  assert.equal(engine.beginClearNest(), true);
+  const firstDefenderIds = state.zombies
+    .filter((zombie) => zombie.defenderPoiId === poi.id)
+    .map((zombie) => zombie.id)
+    .sort();
+  assert.ok(firstDefenderIds.length > 0);
+  assert.equal(engine.cancelActivity(), true);
+  assert.equal(engine.beginClearNest(), true);
+  assert.deepEqual(
+    state.zombies
+      .filter((zombie) => zombie.defenderPoiId === poi.id)
+      .map((zombie) => zombie.id)
+      .sort(),
+    firstDefenderIds
+  );
+
+  defeatPoiDefendersWithPlayerCommands(state, engine, poi.id);
+  const unrelated = weakZombie(destinationPoint(poi.pos, 0, 2));
+  state.zombies.push(unrelated);
+  for (let step = 0; step < 80 && state.activity; step += 1) engine.step(0.25);
+  assert.equal(poi.nest.active, false, "un infecté non associé ne doit pas bloquer la destruction du nid");
+  assert.equal(unrelated.dead, false);
 });
 
 test("mise à jour majeure 8 — les avant-postes étendent le réseau et produisent des ressources", () => {
@@ -204,6 +296,88 @@ test("mise à jour majeure 9 — le fourgon est réparable, rapide, consommateur
   engine.damagePlayer(20, "walker");
   assert.ok(state.player.health > 85, "le blindage doit absorber plus de la moitié du choc");
   assert.ok(state.vehicle.condition < conditionBeforeHit);
+});
+
+test("fourgon — le stationnement persiste et démarrage/réparation exigent sa proximité", () => {
+  const { state, engine } = createEngine(10_901);
+  fillResources(state);
+  state.vehicle.discovered = true;
+  state.research.unlocked.push("mechanics");
+  state.player.health = state.player.maxHealth = 1_000_000;
+  state.timers.ambientSpawn = 1_000_000;
+  state.timers.nestSpawn = 1_000_000;
+  assert.equal(engine.repairVehicle(), true);
+  assert.equal(state.vehicle.parkedAt, "base");
+  assert.equal(engine.toggleVehicle(), true);
+
+  const fieldStop = destinationPoint(state.base.pos, 0, 120);
+  assert.equal(engine.moveTo(fieldStop), true);
+  for (let step = 0; step < 80 && state.player.target; step += 1) engine.step(0.25);
+  assert.equal(state.player.target, null);
+  assert.equal(engine.toggleVehicle(), true);
+  const parkedPosition = { ...state.vehicle.pos };
+  assert.equal(state.vehicle.parkedAt, "field");
+  assert.ok(distanceMeters(parkedPosition, fieldStop) < 0.1);
+
+  assert.equal(engine.returnToBase(), true);
+  for (let step = 0; step < 160 && state.player.target; step += 1) engine.step(0.25);
+  assert.equal(state.player.target, null);
+  assert.ok(distanceMeters(state.player.pos, state.vehicle.pos) > 48);
+  state.inventory.repairKit = 1;
+  assert.equal(engine.repairVehicleWithKit(), false);
+  assert.equal(state.inventory.repairKit, 1);
+  assert.equal(engine.toggleVehicle(), false, "le fourgon garé au loin ne doit pas se téléporter au joueur");
+  assert.ok(distanceMeters(state.vehicle.pos, parkedPosition) < 0.1);
+
+  assert.equal(engine.moveTo(parkedPosition), true);
+  for (let step = 0; step < 160 && state.player.target; step += 1) engine.step(0.25);
+  assert.equal(engine.repairVehicleWithKit(), true);
+  assert.equal(state.inventory.repairKit, 0);
+  assert.equal(engine.toggleVehicle(), true);
+  state.resources.fuel = 0.001;
+  assert.equal(engine.moveTo(destinationPoint(state.player.pos, Math.PI / 2, 100)), true);
+  for (let step = 0; step < 4 && state.vehicle.active; step += 1) engine.step(0.25);
+  assert.equal(state.vehicle.active, false);
+  assert.ok(distanceMeters(state.vehicle.pos, state.player.pos) < 0.1);
+  assert.equal(state.vehicle.parkedAt, "field");
+});
+
+test("communauté — blessure ou moral effondré désactive le rôle, et les soins continuent sans le joueur", () => {
+  const roleState = createEngine(10_902);
+  const guard = roleState.state.base.roster.find((survivor) => survivor.role === "guard");
+  assert.ok(guard);
+  assert.equal(roleState.engine.roleCount("guard"), 1);
+  guard.morale = 20;
+  assert.equal(roleState.engine.roleCount("guard"), 0);
+  guard.morale = 100;
+  guard.injured = true;
+  assert.equal(roleState.engine.roleCount("guard"), 0);
+  guard.injured = false;
+  guard.health = 20;
+  assert.equal(roleState.engine.roleCount("guard"), 0);
+
+  for (const treatment of ["infirmary", "medic"]) {
+    const { state, engine } = createEngine(treatment === "infirmary" ? 10_903 : 10_904);
+    state.totalMinutes = 10 * 60;
+    state.player.pos = destinationPoint(state.base.pos, 0, 200);
+    state.player.atBase = false;
+    state.player.health = state.player.maxHealth = 1_000_000;
+    state.timers.ambientSpawn = 1_000_000;
+    state.timers.nestSpawn = 1_000_000;
+    for (const survivor of state.base.roster) survivor.role = "idle";
+    if (treatment === "infirmary") {
+      state.base.structures.infirmary = 1;
+    } else {
+      state.base.roster[0].role = "medic";
+    }
+    const patient = state.base.roster[1];
+    patient.injured = true;
+    patient.health = 94;
+    for (let step = 0; step < 220 && patient.injured; step += 1) engine.step(0.25);
+    assert.equal(patient.injured, false, `${treatment} doit soigner le roster même si le joueur est absent`);
+    assert.ok(patient.health >= 95);
+    assert.equal(state.player.atBase, false);
+  }
 });
 
 test("mise à jour majeure 10 — la campagne d’évacuation mène à une victoire jouable", () => {

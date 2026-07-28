@@ -70,7 +70,7 @@ test("la sauvegarde secondaire récupère automatiquement une sauvegarde princip
   }
 });
 
-test("la migration conserve la sauvegarde 1.x originale dans la copie de secours", () => {
+test("la migration conserve une copie de secours nettoyée et jouable", () => {
   const storage = makeStorage();
   globalThis.localStorage = storage;
   const legacy = createInitialState({ start: START, seed: 444 });
@@ -83,6 +83,9 @@ test("la migration conserve la sauvegarde 1.x originale dans la copie de secours
   assert.ok(migrated);
   assert.equal(migrated.version, GAME_VERSION);
   assert.equal(migrated.score, 654);
-  assert.equal(storage.values.get(BACKUP_SAVE_KEY), legacyRaw);
+  const backup = JSON.parse(storage.values.get(BACKUP_SAVE_KEY));
+  assert.equal(backup.version, GAME_VERSION);
+  assert.equal(backup.score, 654);
+  assert.equal(validateMigratedState(migrateState(backup)), true);
   assert.equal(JSON.parse(storage.values.get(SAVE_KEY)).version, GAME_VERSION);
 });

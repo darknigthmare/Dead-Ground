@@ -1,4 +1,4 @@
-# Dead Ground: Satellite Survival — 2.0.0
+# Dead Ground: Satellite Survival — 2.0.1
 
 **Dead Ground** est un jeu de survie zombie géolocalisé, jouable dans un navigateur. Le joueur choisit un point réel, l’utilise comme base, explore les environs, organise une communauté et prépare une évacuation au milieu d’un territoire contaminé.
 
@@ -75,41 +75,24 @@ Trois modules de signal sont disséminés dans le secteur. Après les avoir réc
 - sons procéduraux Web Audio ;
 - PWA installable et mode procédural hors ligne ;
 - build statique prêt pour Vercel ;
-- contrôle syntaxique, audit TypeScript `checkJs`, validation du build et **48 tests automatisés**.
+- contrôle syntaxique multiplateforme, audit TypeScript `checkJs`, tests automatisés et validation du build.
 
 ## Monde réel avec Google Places
 
-Lorsqu’une nouvelle partie est lancée avec les API Google configurées, le jeu analyse un rayon de **1 500 mètres** autour de la base et transforme jusqu’à vingt résultats en lieux de jeu. Les données conservées sont limitées au nom, à l’adresse, aux coordonnées, au type, à l’identifiant et au lien Google Maps.
+Lorsqu’une nouvelle partie est lancée avec les API Google configurées, le jeu analyse un rayon de **1 500 mètres** autour de la base et transforme jusqu’à vingt résultats en lieux de jeu. La requête Places ne demande que `id` et `location`. Le nom tactique et la catégorie de chaque objectif sont générés par Dead Ground, indépendamment du contenu descriptif Google.
 
-Exemples de conversion :
-
-| Catégorie Google | Lieu de jeu |
-|---|---|
-| pharmacie, drugstore | Pharmacie |
-| hôpital, clinique, médecin | Centre médical |
-| police, caserne de pompiers | Poste de sécurité |
-| station-service | Station-service |
-| supermarché, épicerie, centre commercial | Zone de vivres |
-| quincaillerie, magasin de bricolage | Magasin de bricolage |
-| entrepôt, stockage | Entrepôt |
-| école, université | École évacuée |
-| immeuble, résidence, hôtel | Bâtiment résidentiel |
+La sauvegarde ne conserve ni nom, ni adresse, ni type descriptif, ni lien Google. Elle peut garder l’identifiant du lieu et ses coordonnées pendant **30 jours au maximum**. À expiration, les coordonnées Google sont remplacées par une position procédurale avant la sauvegarde suivante.
 
 Les résultats trop proches de la base, hors zone, en doublon ou presque superposés sont écartés. Le compteur affiché correspond uniquement aux lieux réellement acceptés. Si l’API ne renvoie pas assez de résultats, les emplacements restants sont générés procéduralement ; une panne ou un quota dépassé ne bloque pas la partie.
 
 ## Installation locale
 
-Prérequis pour les commandes de développement : **Node.js 20 ou plus récent** et Python 3 pour le serveur local. Le jeu n’a aucune dépendance npm d’exécution. TypeScript est facultatif et sert uniquement à relancer l’audit `checkJs`.
+Prérequis pour les commandes de développement : **Node.js 20 ou plus récent**. Le jeu n’a aucune dépendance npm d’exécution ; TypeScript est verrouillé comme dépendance de développement pour rendre l’audit `checkJs` reproductible.
 
 ```bash
+npm install
 npm run validate
 npm run dev
-```
-
-L’audit de types optionnel peut être relancé séparément lorsqu’un exécutable TypeScript (`tsc`) est disponible :
-
-```bash
-npm run check:types
 ```
 
 Ouvrir ensuite :
@@ -202,19 +185,19 @@ Sur mobile, le bouton **Gestion** ouvre les panneaux Base, Expéditions, Surviva
 
 ## Sauvegardes 1.x
 
-Une sauvegarde de la version 1.0 ou 1.1 est migrée automatiquement vers le schéma 2.0. Les positions, ressources, infrastructures, progression, lieux et statistiques existantes sont conservés. Les nouveaux systèmes reçoivent des valeurs cohérentes, et le fichier original est stocké dans la sauvegarde secondaire avant l’écriture du format migré.
+Une sauvegarde de la version 1.0 ou 1.1 est migrée automatiquement vers le schéma 2.0. Les positions, ressources, infrastructures, progression, lieux et statistiques existantes sont conservés. Les nouveaux systèmes reçoivent des valeurs cohérentes, et une copie secondaire normalisée et nettoyée est écrite avant la reprise du jeu.
 
 ## Commandes de qualité
 
 ```bash
 npm run check         # syntaxe JavaScript
-npm run check:types   # audit optionnel, nécessite la commande tsc
-npm test              # 48 tests Node
+npm run check:types   # audit TypeScript allowJs + checkJs
+npm test              # suite de tests Node
 npm run build         # production dans dist/
 npm run validate      # syntaxe + tests + build + validation du paquet
 ```
 
-La commande `npm run validate` contrôle aussi les imports ES, les fichiers PWA, les références HTML et l’absence de fichiers de développement indésirables dans le paquet construit. L’audit `checkJs` a été exécuté séparément pour cette livraison.
+La commande `npm run validate` contrôle aussi les imports ES, les fichiers PWA, les références HTML, les pages légales et l’absence de fichiers de développement indésirables dans le paquet construit.
 
 ## Architecture
 
@@ -234,6 +217,7 @@ src/ui.js                   HUD, panneaux et fenêtres modales
 src/storage.js              sauvegarde principale, secours, import/export
 src/audio.js                sons Web Audio
 service-worker.js           cache des seuls fichiers appartenant au jeu
+privacy.html / terms.html   information et conditions destinées au joueur
 scripts/                    build et validation statique
 tests/                      tests moteur, migration, rendu et simulation longue
 ```
@@ -246,6 +230,8 @@ Le fichier `vercel.json` configure la commande de build, le dossier `dist`, le s
 2. déployer ;
 3. ajouter le domaine HTTPS de production aux restrictions HTTP de la clé Google ;
 4. créer une nouvelle partie pour générer les lieux du secteur choisi.
+
+Sans variable Google, la production est volontairement déployée en mode procédural : elle reste entièrement jouable et n’expose aucune clé.
 
 ## Limites actuelles
 
@@ -263,3 +249,5 @@ Lire [`CODEX_HANDOFF.md`](CODEX_HANDOFF.md), [`GAME_DESIGN.md`](GAME_DESIGN.md) 
 ## Licence
 
 Le code est fourni sous licence MIT. Les cartes, données, images, logos et attributions Google restent soumis aux conditions de Google Maps Platform et ne font pas partie de cette licence.
+
+Consulter aussi la [politique de confidentialité](privacy.html) et les [conditions d’utilisation](terms.html).

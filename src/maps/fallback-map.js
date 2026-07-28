@@ -120,14 +120,14 @@ export class FallbackMapAdapter {
       drawSelectionOverlay(this.ctx, (position) => this.project(position), this.selection, {
         width: this.width,
         height: this.height
-      });
+      }, { clear: false });
     } else {
       drawGameOverlay(
         this.ctx,
         (position) => this.project(position),
         this.snapshot,
         { width: this.width, height: this.height },
-        { zoom: 17 + this.pixelsPerMeter }
+        { zoom: 17 + this.pixelsPerMeter, clear: false }
       );
     }
   }

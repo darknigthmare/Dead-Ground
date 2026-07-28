@@ -15,7 +15,10 @@ import {
 import { createInitialState } from "./world.js";
 import { normalizeGooglePlaces } from "./real-places.js";
 import { GameUI } from "./ui.js";
-import { GoogleMapAdapter } from "./maps/google-map.js";
+import {
+  GoogleMapAdapter,
+  resetGoogleMapsLoader
+} from "./maps/google-map.js";
 import { FallbackMapAdapter } from "./maps/fallback-map.js";
 
 const appRoot = document.querySelector("#app");
@@ -32,7 +35,7 @@ const sound = new SoundManager(settings.soundEnabled);
 const ui = new GameUI(appRoot, {
   startNew: (difficultyId) => void startNewGame(difficultyId),
   continueGame: () => continueSavedGame(),
-  locate: () => locatePlayer(),
+  locate: () => void locatePlayer(),
   searchLocation: (query) => searchLocation(query),
   saveSettings: (nextSettings) => applySettings(nextSettings),
   requestRender: () => currentState && ui.renderGame(currentState, settings),
@@ -49,6 +52,7 @@ const ui = new GameUI(appRoot, {
   },
   toggleAutoFire: () => engine?.toggleAutoFire(),
   returnToBase: () => engine?.returnToBase(),
+  returnToVehicle: () => engine?.returnToVehicle(),
   scavenge: () => engine?.beginScavenge(),
   clearNest: () => engine?.beginClearNest(),
   cancelActivity: () => engine?.cancelActivity(),
@@ -74,11 +78,15 @@ const ui = new GameUI(appRoot, {
   dismissNotification: (id) => engine?.dismissNotification(id),
   nextTutorial: () => {
     engine?.advanceTutorial();
-    if (currentState && !currentState.tutorialVisible) markTutorialSeen();
+    if (currentState && !currentState.tutorialVisible) {
+      markTutorialSeen();
+      engine?.pause(false);
+    }
   },
   skipTutorial: () => {
     engine?.hideTutorial();
     markTutorialSeen();
+    engine?.pause(false);
   },
   exportSave: () => currentState && exportSave(currentState),
   importSave: (file) => handleImport(file),
@@ -158,7 +166,6 @@ function handleMapClick(position) {
 }
 
 async function startNewGame(difficultyId, forcedStart = selectedStart) {
-  deleteSave();
   let realPois = [];
   const canSearchRealPlaces = Boolean(settings.googleMapsApiKey && mapAdapter?.searchNearbyPois);
 
@@ -190,6 +197,7 @@ async function startNewGame(difficultyId, forcedStart = selectedStart) {
 
   const state = createInitialState({ start: forcedStart, difficultyId, realPois });
   state.tutorialVisible = !settings.tutorialSeen;
+  deleteSave();
   launchState(state);
 }
 
@@ -206,6 +214,7 @@ function continueSavedGame() {
 
 function launchState(state) {
   engine?.stop();
+  if (state.status === "playing" && state.tutorialVisible) state.paused = true;
   currentState = state;
   phase = "game";
   ui.setPhase("game");
@@ -218,7 +227,7 @@ function launchState(state) {
       currentState = nextState;
       mapAdapter?.setSnapshot(nextState);
       const now = performance.now();
-      if (nextState.player.target && now - followPulseAt > 620) {
+      if (nextState.mapFollowsPlayer && nextState.player.target && now - followPulseAt > 620) {
         followPulseAt = now;
         mapAdapter?.panTo(nextState.player.pos);
       }
@@ -274,7 +283,9 @@ async function searchLocation(query) {
   }
 }
 
-function locatePlayer() {
+async function locatePlayer() {
+  const consented = await ui.requestLocationConsent?.();
+  if (consented === false) return;
   if (!navigator.geolocation) {
     ui.showToast("warning", "Géolocalisation indisponible", "Ce navigateur ne fournit pas la position.");
     return;
@@ -310,9 +321,14 @@ async function applySettings(nextSettings) {
   if (currentState) ui.renderGame(currentState, settings);
 
   if (keyChanged) {
+    const loaderReset = resetGoogleMapsLoader({ reloadIfLoaded: true });
+    if (loaderReset.reloading) return;
     ui.setLoading(true, "Reconfiguration du moteur cartographique…");
-    await initializeMap({ preserveView: true });
-    ui.setLoading(false);
+    try {
+      await initializeMap({ preserveView: true });
+    } finally {
+      ui.setLoading(false);
+    }
   }
   ui.showToast("success", "Paramètres enregistrés", keyChanged ? "Le fournisseur cartographique a été rechargé." : "Configuration appliquée.");
 }
@@ -348,7 +364,7 @@ function restartGame() {
   if (!currentState) return;
   const start = { ...currentState.base.pos };
   const difficultyId = currentState.difficultyId;
-  startNewGame(difficultyId, start);
+  void startNewGame(difficultyId, start);
 }
 
 async function handleImport(file) {
@@ -366,22 +382,33 @@ function installKeyboardControls() {
   window.addEventListener("keydown", (event) => {
     const target = event.target;
     if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return;
+    if (event.ctrlKey || event.altKey || event.metaKey) return;
+    if (event.code === "Escape" && ui.isSettingsOpen?.()) {
+      event.preventDefault();
+      ui.closeSettings?.();
+      return;
+    }
     if (phase !== "game" || !engine) return;
+    if (event.code === "Escape" && currentState?.tutorialVisible) {
+      event.preventDefault();
+      return;
+    }
+    const key = String(event.key || "").toLowerCase();
 
     if (event.code === "Space") {
       event.preventDefault();
       engine.fire();
-    } else if (event.code === "KeyF") {
+    } else if (key === "f") {
       engine.melee();
     } else if (event.code === "Digit1") {
       engine.heal();
     } else if (event.code === "Digit2") {
       engine.useAntidote();
-    } else if (event.code === "KeyV" && !event.repeat) {
+    } else if (key === "v" && !event.repeat) {
       engine.toggleVehicle();
-    } else if (event.code === "KeyA" && !event.repeat) {
+    } else if (key === "a" && !event.repeat) {
       engine.toggleAutoFire();
-    } else if (event.code === "KeyR") {
+    } else if (key === "r") {
       engine.returnToBase();
     } else if (event.code === "Escape" && !event.repeat) {
       engine.togglePause();
@@ -392,7 +419,7 @@ function installKeyboardControls() {
 
   window.addEventListener("keyup", (event) => {
     if (phase !== "game" || !engine) return;
-    if (event.code === "ShiftLeft" || event.code === "ShiftRight") engine.setMovementMode("walk");
+    if (event.code === "ShiftLeft" || event.code === "ShiftRight") engine.releaseSprint();
   });
 
   document.addEventListener("visibilitychange", () => {

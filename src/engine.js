@@ -12,7 +12,9 @@ import {
   SURVIVOR_ROLES,
   TUTORIAL_STEPS,
   VEHICLE_DEFINITION,
+  VEHICLE_INTERACTION_RANGE_METERS,
   WEATHER_TYPES,
+  WAVE_RECOVERY_REWARDS,
   ZOMBIE_TYPES
 } from "./constants.js";
 import {
@@ -55,6 +57,7 @@ export class GameEngine {
     this.running = false;
     this.lastFrameAt = 0;
     this.frameHandle = null;
+    this.ensureVehicleLocation();
   }
 
   setHooks(hooks = {}) {
@@ -119,6 +122,7 @@ export class GameEngine {
     this.updateThreatAndNoise(clampedDt);
     this.updateTransient(clampedDt);
     this.checkEndConditions();
+    if (state.status === "playing") this.resolveWaveCompletion();
 
     state.timers.uiPulse += clampedDt;
     state.timers.savePulse += clampedDt;
@@ -133,7 +137,7 @@ export class GameEngine {
   }
 
   random() {
-    let value = this.state.randomState >>> 0;
+    let value = (this.state.randomState >>> 0) || 0x9e3779b9;
     value ^= value << 13;
     value ^= value >>> 17;
     value ^= value << 5;
@@ -152,6 +156,7 @@ export class GameEngine {
   pause(value = true) {
     if (this.state.status !== "playing") return;
     this.state.paused = Boolean(value);
+    if (this.state.paused) this.state.movementMode = "walk";
     this.hooks.onChange(this.state);
   }
 
@@ -186,6 +191,19 @@ export class GameEngine {
     return true;
   }
 
+  returnToVehicle() {
+    const vehicle = this.state.vehicle;
+    if (!vehicle?.repaired || vehicle.active || !vehicle.pos) return false;
+    if (!this.moveTo(vehicle.pos)) return false;
+    this.state.selectedPoiId = null;
+    this.notify(
+      "info",
+      "REJOINDRE LE FOURGON",
+      `${Math.round(distanceMeters(this.state.player.pos, vehicle.pos))} m jusqu’au véhicule garé.`
+    );
+    return true;
+  }
+
   selectPoi(poiId) {
     const poi = poiById(this.state, poiId);
     if (!poi) return false;
@@ -199,6 +217,13 @@ export class GameEngine {
     if (!this.canAcceptCommand() || !["walk", "sprint"].includes(mode)) return false;
     if (this.state.vehicle.active && mode === "sprint") return false;
     this.state.movementMode = mode;
+    this.hooks.onChange(this.state);
+    return true;
+  }
+
+  releaseSprint() {
+    if (this.state.status !== "playing" || this.state.movementMode !== "sprint") return false;
+    this.state.movementMode = "walk";
     this.hooks.onChange(this.state);
     return true;
   }
@@ -300,7 +325,13 @@ export class GameEngine {
       return false;
     }
 
+    const defenderState = this.poiDefenderState(poi, "scavenge");
+    if (!defenderState.spawnedBefore && state.zombies.length >= MAX_ZOMBIES) {
+      this.notify("warning", "Zone saturée", "Éliminez des infectés avant de lancer cette fouille.");
+      return false;
+    }
     state.player.target = null;
+    this.parkVehicleAtPlayer();
     poi.visited = true;
     poi.discovered = true;
     const scouts = this.roleCount("scout");
@@ -314,7 +345,15 @@ export class GameEngine {
     state.noise = clamp(state.noise + 18 + poi.danger * 3, 0, 100);
     state.threat = clamp(state.threat + poi.danger * 1.3, 0, 100);
     this.spawnPoiDefenders(poi, false);
-    this.notify("warning", "Fouille en cours", "Le bruit peut attirer des infectés.");
+    this.recallPoiDefenders(poi);
+    state.activity.blocked = this.hasLivingPoiDefenders(poi.id);
+    this.notify(
+      "warning",
+      "Fouille en cours",
+      state.activity.blocked
+        ? "Éliminez les défenseurs associés avant de terminer la fouille."
+        : "Le périmètre est sécurisé, la récupération peut commencer."
+    );
     this.hooks.onSound("search");
     return true;
   }
@@ -327,7 +366,13 @@ export class GameEngine {
       this.notify("warning", "Trop loin", "Rejoignez le nid avant de lancer le nettoyage.");
       return false;
     }
+    const defenderState = this.poiDefenderState(poi, "clearNest");
+    if (!defenderState.spawnedBefore && state.zombies.length >= MAX_ZOMBIES) {
+      this.notify("warning", "Zone saturée", "Éliminez des infectés avant d’exposer les défenseurs du nid.");
+      return false;
+    }
     state.player.target = null;
+    this.parkVehicleAtPlayer();
     poi.visited = true;
     state.activity = {
       type: "clearNest",
@@ -339,7 +384,15 @@ export class GameEngine {
     state.noise = clamp(state.noise + 30, 0, 100);
     state.threat = clamp(state.threat + 4, 0, 100);
     this.spawnPoiDefenders(poi, true);
-    this.notify("danger", "NETTOYAGE DU NID", "Éliminez les défenseurs pour reprendre la destruction du foyer.");
+    this.recallPoiDefenders(poi);
+    state.activity.blocked = this.hasLivingPoiDefenders(poi.id);
+    this.notify(
+      "danger",
+      "NETTOYAGE DU NID",
+      state.activity.blocked
+        ? "Éliminez les défenseurs pour reprendre la destruction du foyer."
+        : "Le foyer est exposé, sa destruction peut commencer."
+    );
     this.hooks.onSound("wave");
     return true;
   }
@@ -533,6 +586,8 @@ export class GameEngine {
     this.consumeResources(cost);
     state.vehicle.repaired = true;
     state.vehicle.condition = state.vehicle.maxCondition;
+    state.vehicle.pos = { ...state.base.pos };
+    state.vehicle.parkedAt = "base";
     state.score += 180;
     this.log("vehicle", "Le fourgon d’expédition est remis en état.");
     this.notify("success", "FOURGON OPÉRATIONNEL", "Activez-le pour accélérer les déplacements.");
@@ -542,10 +597,32 @@ export class GameEngine {
 
   repairVehicleWithKit() {
     const { state } = this;
-    if (!this.canAcceptCommand() || !state.vehicle.repaired || state.inventory.repairKit <= 0 || state.vehicle.condition >= state.vehicle.maxCondition) return false;
+    if (!this.canAcceptCommand() || state.activity || state.inventory.repairKit <= 0) return false;
+    const canRepairVehicle =
+      state.vehicle.repaired &&
+      !state.vehicle.active &&
+      state.vehicle.condition < state.vehicle.maxCondition &&
+      this.isPlayerNearVehicle();
+    const canRepairWall =
+      state.player.atBase &&
+      state.base.wallMaxHealth > 0 &&
+      state.base.wallHealth < state.base.wallMaxHealth;
+    const canRepairBase =
+      state.player.atBase &&
+      state.base.health < state.base.maxHealth;
+    if (!canRepairVehicle && !canRepairWall && !canRepairBase) return false;
+
     state.inventory.repairKit -= 1;
-    state.vehicle.condition = Math.min(state.vehicle.maxCondition, state.vehicle.condition + 42);
-    this.notify("success", "Véhicule réparé", `État : ${Math.round(state.vehicle.condition)} %.`);
+    if (canRepairVehicle) {
+      state.vehicle.condition = Math.min(state.vehicle.maxCondition, state.vehicle.condition + 42);
+      this.notify("success", "Véhicule réparé", `État : ${Math.round(state.vehicle.condition)} %.`);
+    } else if (canRepairWall) {
+      state.base.wallHealth = Math.min(state.base.wallMaxHealth, state.base.wallHealth + 115);
+      this.notify("success", "Défense renforcée", `Palissade : ${Math.round(state.base.wallHealth)}/${state.base.wallMaxHealth}.`);
+    } else {
+      state.base.health = Math.min(state.base.maxHealth, state.base.health + 85);
+      this.notify("success", "Centre renforcé", `Structure : ${Math.round(state.base.health)}/${state.base.maxHealth}.`);
+    }
     this.hooks.onSound("build");
     return true;
   }
@@ -557,8 +634,19 @@ export class GameEngine {
       this.notify("warning", "Réservoir vide", "Trouvez du carburant avant de démarrer.");
       return false;
     }
+    if (!state.vehicle.active && !this.isPlayerNearVehicle()) {
+      this.notify("warning", "Fourgon trop éloigné", "Rejoignez le véhicule garé avant de le démarrer.");
+      return false;
+    }
     state.vehicle.active = !state.vehicle.active;
-    if (state.vehicle.active) state.movementMode = "walk";
+    if (state.vehicle.active) {
+      state.movementMode = "walk";
+      state.vehicle.pos = { ...state.player.pos };
+      state.vehicle.parkedAt = "mobile";
+    } else {
+      state.vehicle.pos = { ...state.player.pos };
+      this.updateVehicleParking();
+    }
     this.notify("info", state.vehicle.active ? "Fourgon démarré" : "Fourgon arrêté", state.vehicle.active ? "Vitesse et protection accrues, bruit important." : "Déplacement à pied rétabli.");
     return true;
   }
@@ -620,6 +708,105 @@ export class GameEngine {
     return this.state.status === "playing" && !this.state.paused;
   }
 
+  poiDefenderState(poi, activityType) {
+    const raw = poi?.defendersSpawned;
+    return {
+      spawnedBefore: raw && typeof raw === "object"
+        ? Boolean(raw[activityType])
+        : Boolean(raw)
+    };
+  }
+
+  recallPoiDefenders(poi) {
+    const defenders = this.state.zombies.filter(
+      (zombie) => !zombie.dead && zombie.defenderPoiId === poi.id
+    );
+    defenders.forEach((zombie, index) => {
+      if (distanceMeters(zombie.pos, poi.pos) <= 125) return;
+      const angle = (index / Math.max(1, defenders.length)) * Math.PI * 2;
+      zombie.pos = destinationPoint(poi.pos, angle, 48 + (index % 3) * 9);
+      zombie.target = "player";
+    });
+    return defenders.length;
+  }
+
+  ensureVehicleLocation() {
+    const { state } = this;
+    const vehicle = state.vehicle;
+    if (!vehicle) return;
+
+    const positionIsValid =
+      vehicle.pos?.lat != null &&
+      vehicle.pos?.lng != null &&
+      vehicle.pos.lat !== "" &&
+      vehicle.pos.lng !== "" &&
+      Number.isFinite(Number(vehicle.pos?.lat)) &&
+      Number.isFinite(Number(vehicle.pos?.lng));
+    if (!positionIsValid) {
+      vehicle.pos = {
+        ...(vehicle.active ? state.player.pos : state.base.pos)
+      };
+    } else {
+      vehicle.pos = {
+        lat: Number(vehicle.pos.lat),
+        lng: Number(vehicle.pos.lng)
+      };
+    }
+
+    if (vehicle.active) vehicle.pos = { ...state.player.pos };
+    this.updateVehicleParking();
+  }
+
+  parkVehicleAtPlayer() {
+    const vehicle = this.state.vehicle;
+    if (!vehicle?.active) return;
+    vehicle.active = false;
+    vehicle.pos = { ...this.state.player.pos };
+    this.updateVehicleParking();
+  }
+
+  updateVehicleParking() {
+    const { state } = this;
+    const vehicle = state.vehicle;
+    if (!vehicle?.pos) return;
+    if (vehicle.active) {
+      vehicle.parkedAt = "mobile";
+      return;
+    }
+    if (!vehicle.discovered) {
+      vehicle.parkedAt = vehicle.parkedAt ?? "wreck";
+      return;
+    }
+
+    if (distanceMeters(vehicle.pos, state.base.pos) <= VEHICLE_INTERACTION_RANGE_METERS) {
+      vehicle.parkedAt = "base";
+      return;
+    }
+    const nearbyOutpost = state.pois.find(
+      (poi) => poi.outpost && distanceMeters(vehicle.pos, poi.pos) <= VEHICLE_INTERACTION_RANGE_METERS
+    );
+    vehicle.parkedAt = nearbyOutpost?.id ?? "field";
+  }
+
+  isPlayerNearVehicle() {
+    this.ensureVehicleLocation();
+    return (
+      Boolean(this.state.vehicle?.pos) &&
+      distanceMeters(this.state.player.pos, this.state.vehicle.pos) <= VEHICLE_INTERACTION_RANGE_METERS
+    );
+  }
+
+  hasLivingPoiDefenders(poiId) {
+    return this.state.zombies.some(
+      (zombie) => !zombie.dead && zombie.defenderPoiId === poiId
+    );
+  }
+
+  autosaveNow() {
+    if (this.state.timers) this.state.timers.savePulse = 0;
+    this.hooks.onAutosave(this.state);
+  }
+
   isPositionInCoverage(position) {
     const { state } = this;
     const baseRange = 1450 + state.base.structures.radio * 350 + this.roleCount("scout") * 90 + (this.hasResearch("radioNetwork") ? 320 : 0);
@@ -633,6 +820,7 @@ export class GameEngine {
     const player = state.player;
     const target = player.target;
     const weather = this.weatherConfig();
+    this.ensureVehicleLocation();
     const injuryMultiplier = player.injury === "fracture" ? 0.62 : player.injury === "sprain" ? 0.82 : 1;
     const sprinting = !state.vehicle.active && state.movementMode === "sprint" && player.stamina > 4;
     const baseSpeed = state.vehicle.active ? VEHICLE_DEFINITION.speed : sprinting ? PLAYER_SPRINT_SPEED : PLAYER_WALK_SPEED;
@@ -651,10 +839,13 @@ export class GameEngine {
         state.resources.fuel = Math.max(0, state.resources.fuel - fuelUsed);
         state.vehicle.distanceTravelled += movement.travelled;
         state.vehicle.condition = Math.max(0, state.vehicle.condition - movement.travelled / 3800);
+        state.vehicle.pos = { ...player.pos };
+        state.vehicle.parkedAt = "mobile";
         state.noise = clamp(state.noise + dt * 9.5 * weather.playerNoise, 0, 100);
         player.stamina = Math.min(player.maxStamina, player.stamina + dt * 3);
         if (state.resources.fuel <= 0 || state.vehicle.condition <= 0) {
           state.vehicle.active = false;
+          state.vehicle.pos = { ...player.pos };
           this.notify("danger", state.resources.fuel <= 0 ? "Carburant épuisé" : "Véhicule immobilisé", "Le trajet continue à pied.");
         }
       } else if (sprinting) {
@@ -686,6 +877,8 @@ export class GameEngine {
     player.atBase = distanceMeters(player.pos, state.base.pos) <= state.base.radius + 8;
     const nearbyOutpost = state.pois.find((poi) => poi.outpost && distanceMeters(player.pos, poi.pos) <= OUTPOST_SAFE_RADIUS);
     player.atOutpostId = nearbyOutpost?.id ?? null;
+    if (state.vehicle.active) state.vehicle.pos = { ...player.pos };
+    this.updateVehicleParking();
   }
 
   updateActivity(dt) {
@@ -698,18 +891,9 @@ export class GameEngine {
       return;
     }
 
-    if (activity.type === "clearNest") {
-      const hostileNearby = state.zombies.some(
-        (zombie) => !zombie.dead && distanceMeters(zombie.pos, poi.pos) <= 38
-      );
-      activity.blocked = hostileNearby;
-      if (!hostileNearby) activity.elapsed += dt;
-      state.noise = clamp(state.noise + dt * 3.8, 0, 100);
-    } else {
-      activity.blocked = false;
-      activity.elapsed += dt;
-      state.noise = clamp(state.noise + dt * 2.5, 0, 100);
-    }
+    activity.blocked = this.hasLivingPoiDefenders(poi.id);
+    if (!activity.blocked) activity.elapsed += dt;
+    state.noise = clamp(state.noise + dt * (activity.type === "clearNest" ? 3.8 : 2.5), 0, 100);
 
     if (activity.elapsed >= activity.duration) {
       if (activity.type === "scavenge" && !poi.looted) this.completeScavenge(poi);
@@ -720,7 +904,10 @@ export class GameEngine {
 
   completeScavenge(poi) {
     const { state } = this;
-    const scoutBonus = 1 + this.roleCount("scout") * 0.05 + (state.vehicle.active ? 0.15 : 0);
+    const vehicleSupport =
+      state.vehicle.repaired &&
+      this.isPlayerNearVehicle();
+    const scoutBonus = 1 + this.roleCount("scout") * 0.05 + (vehicleSupport ? 0.15 : 0);
     const loot = rollPoiLoot(poi, state.difficultyId, scoutBonus);
     for (const [resource, amount] of Object.entries(loot)) {
       state.resources[resource] = (state.resources[resource] ?? 0) + amount;
@@ -747,6 +934,8 @@ export class GameEngine {
 
     if (poi.vehicleWreck && !state.vehicle.discovered) {
       state.vehicle.discovered = true;
+      state.vehicle.pos = { ...state.base.pos };
+      state.vehicle.parkedAt = "base";
       this.log("vehicle", "Un fourgon réparable a été remorqué jusqu’à la base.");
       this.notify("success", "VÉHICULE RÉCUPÉRÉ", "Recherchez la mécanique puis réparez-le à la base.");
     }
@@ -897,10 +1086,12 @@ export class GameEngine {
     if (shouldRunGenerator) {
       state.timers.generatorFuelPulse += gameMinutesDelta;
       const consumptionPeriod = 105 + generatorLevel * 18;
-      while (state.timers.generatorFuelPulse >= consumptionPeriod && state.resources.fuel > 0) {
-        state.timers.generatorFuelPulse -= consumptionPeriod;
-        state.resources.fuel = Math.max(0, state.resources.fuel - 1);
-      }
+      const consumedFuel = Math.min(
+        state.resources.fuel,
+        Math.floor(state.timers.generatorFuelPulse / consumptionPeriod)
+      );
+      state.timers.generatorFuelPulse -= consumedFuel * consumptionPeriod;
+      state.resources.fuel = Math.max(0, state.resources.fuel - consumedFuel);
     } else {
       state.timers.generatorFuelPulse = Math.min(state.timers.generatorFuelPulse, 30);
     }
@@ -1017,6 +1208,8 @@ export class GameEngine {
       this.notify("success", "ARCHIVES RÉCUPÉRÉES", `+${intel} renseignements.`);
     } else if (mission.type === "vehicle") {
       state.vehicle.discovered = true;
+      state.vehicle.pos = { ...state.base.pos };
+      state.vehicle.parkedAt = "base";
       state.resources.parts += 3;
       this.notify("success", "FOURGON LOCALISÉ", "Le véhicule est disponible dans l’atelier de la base.");
     } else if (mission.type === "nest") {
@@ -1040,7 +1233,7 @@ export class GameEngine {
 
   startNightWave(day) {
     const { state } = this;
-    if ((state.wave.active && state.wave.announcedDay === day) || state.campaign.finalSiegeStarted) return;
+    if (state.wave.active || state.campaign.finalSiegeStarted) return;
     const difficulty = DIFFICULTIES[state.difficultyId] ?? DIFFICULTIES.normal;
     const count = Math.ceil((9 + day * 5 + state.threat * 0.12) * difficulty.spawnRate);
     const bossQueued = day >= 3 && day % 3 === 0 ? 1 : 0;
@@ -1105,6 +1298,8 @@ export class GameEngine {
       }
     }
 
+    if (state.wave.final) return;
+
     state.timers.ambientSpawn -= dt;
     const ambientCap = Math.min(44, Math.ceil((8 + day * 3 + state.threat * 0.1) * difficulty.spawnRate * weather.spawnRate));
     const ambientCount = state.zombies.filter((zombie) => !zombie.wave && !zombie.dead).length;
@@ -1150,9 +1345,22 @@ export class GameEngine {
 
   spawnPoiDefenders(poi, nestAssault = false) {
     const { state } = this;
+    const activityType = nestAssault ? "clearNest" : "scavenge";
+    const rawSpawned = poi.defendersSpawned;
+    poi.defendersSpawned = rawSpawned && typeof rawSpawned === "object"
+      ? {
+          scavenge: Boolean(rawSpawned.scavenge),
+          clearNest: Boolean(rawSpawned.clearNest)
+        }
+      : {
+          scavenge: Boolean(rawSpawned),
+          clearNest: Boolean(rawSpawned)
+        };
+    if (poi.defendersSpawned[activityType]) return 0;
     const day = gameDay(state.totalMinutes);
     const strength = nestAssault ? poi.nest?.strength ?? 1 : 0;
     const count = Math.min(11, 1 + poi.danger + strength * 2 + this.randomInt(0, 2));
+    let spawned = 0;
     for (let index = 0; index < count && state.zombies.length < MAX_ZOMBIES; index += 1) {
       let typeId;
       if (nestAssault && index === 0 && strength >= 2) typeId = "spitter";
@@ -1160,8 +1368,12 @@ export class GameEngine {
       const zombie = this.makeZombie(poi.pos, day, false, typeId);
       const angle = this.randomBetween(0, Math.PI * 2);
       zombie.pos = destinationPoint(poi.pos, angle, this.randomBetween(28, 82));
+      zombie.defenderPoiId = poi.id;
       state.zombies.push(zombie);
+      spawned += 1;
     }
+    if (spawned > 0) poi.defendersSpawned[activityType] = true;
+    return spawned;
   }
 
   updateZombies(dt) {
@@ -1249,7 +1461,10 @@ export class GameEngine {
 
     state.zombies = state.zombies.filter((zombie) => !zombie.dead);
 
-    if (state.autoFire && state.player.fireCooldown <= 0 && !state.activity) {
+    this.checkEndConditions();
+    if (state.status !== "playing") return;
+
+    if (state.autoFire && state.player.fireCooldown <= 0) {
       const nearest = closestEntity(
         state.player.pos,
         state.zombies,
@@ -1258,15 +1473,26 @@ export class GameEngine {
       if (nearest) this.performShot({ automated: true, target: nearest.entity });
     }
 
-    const waveAlive = state.zombies.some((zombie) => zombie.wave && !zombie.dead);
-    if (state.wave.active && state.wave.queued <= 0 && !waveAlive) {
-      this.completeWave();
-    }
+    state.zombies = state.zombies.filter((zombie) => !zombie.dead);
+    this.resolveWaveCompletion();
+  }
+
+  resolveWaveCompletion() {
+    const { state } = this;
+    if (!state.wave.active || state.wave.queued > 0) return false;
+    const hostileAlive = state.wave.final
+      ? state.zombies.some((zombie) => !zombie.dead)
+      : state.zombies.some((zombie) => zombie.wave && !zombie.dead);
+    if (hostileAlive) return false;
+    return this.completeWave();
   }
 
   completeWave() {
     const { state } = this;
     const wasFinal = state.wave.final;
+    this.checkEndConditions();
+    if (state.status !== "playing") return false;
+    if (wasFinal && state.zombies.some((zombie) => !zombie.dead)) return false;
     state.wave.active = false;
     if (wasFinal) {
       state.campaign.finalSiegeDefeated = true;
@@ -1279,21 +1505,31 @@ export class GameEngine {
       this.notify("success", "ÉVACUATION RÉUSSIE", `Campagne terminée au jour ${gameDay(state.totalMinutes)}.`);
       this.hooks.onSound("victory");
       this.hooks.onChange(state);
-      return;
+      this.autosaveNow();
+      return true;
     }
 
     const rewardAmmo = 8 + state.wave.number * 2;
     const rewardParts = 1 + Math.floor(state.wave.number / 2);
     const rewardIntel = state.wave.number % 3 === 0 ? 2 : 1;
+    const rewardMetal = WAVE_RECOVERY_REWARDS.metalBase + Math.ceil(state.wave.number * WAVE_RECOVERY_REWARDS.metalDayFactor);
+    const rewardFuel = WAVE_RECOVERY_REWARDS.fuelBase + Math.floor(state.wave.number / WAVE_RECOVERY_REWARDS.fuelEveryDays);
     state.resources.ammo += rewardAmmo;
     state.resources.parts += rewardParts;
     state.resources.intel += rewardIntel;
+    state.resources.metal += rewardMetal;
+    state.resources.fuel += rewardFuel;
     state.score += 250 + state.wave.number * 100;
     state.base.morale = Math.min(100, state.base.morale + 10);
     this.resolveSurvivorWaveRisk();
     this.log("wave", `Vague ${state.wave.number} repoussée.`);
-    this.notify("success", "AUBE SÉCURISÉE", `+${rewardAmmo} munitions, +${rewardParts} pièces, +${rewardIntel} renseignement(s).`);
+    this.notify(
+      "success",
+      "AUBE SÉCURISÉE",
+      `Récupération : +${rewardAmmo} munitions, +${rewardParts} pièces, +${rewardMetal} métal, +${rewardFuel} carburant, +${rewardIntel} renseignement(s).`
+    );
     this.hooks.onSound("victory");
+    return true;
   }
 
   resolveSurvivorWaveRisk() {
@@ -1379,7 +1615,7 @@ export class GameEngine {
   performShot(options = {}) {
     const { automated = false, target = null } = options;
     const { state } = this;
-    if (!this.canAcceptCommand() || state.player.fireCooldown > 0 || state.resources.ammo <= 0 || state.activity) {
+    if (!this.canAcceptCommand() || state.player.fireCooldown > 0 || state.resources.ammo <= 0) {
       if (!automated && state.resources.ammo <= 0) this.notify("danger", "Chargeur vide", "Trouvez des munitions.");
       return false;
     }
@@ -1456,6 +1692,8 @@ export class GameEngine {
       state.vehicle.condition = Math.max(0, state.vehicle.condition - absorbed * 0.9);
       if (state.vehicle.condition <= 0) {
         state.vehicle.active = false;
+        state.vehicle.pos = { ...state.player.pos };
+        this.updateVehicleParking();
         this.notify("danger", "FOURGON HORS SERVICE", "Le blindage a cédé. Réparez-le avec un kit.");
       }
     }
@@ -1497,10 +1735,11 @@ export class GameEngine {
       player.infection = Math.max(0, player.infection - dt * infectionRecovery);
     }
 
-    if (player.atBase && medics > 0) {
+    const rosterHealRate = state.base.structures.infirmary * 0.025 + medics * 0.045;
+    if (rosterHealRate > 0) {
       for (const survivor of state.base.roster) {
         if (!survivor.injured) continue;
-        survivor.health = Math.min(100, survivor.health + dt * medics * 0.045);
+        survivor.health = Math.min(100, survivor.health + dt * rosterHealRate);
         if (survivor.health >= 95) survivor.injured = false;
       }
     }
@@ -1537,6 +1776,7 @@ export class GameEngine {
       this.notify("danger", "VOUS ÊTES MORT", `Jour ${gameDay(state.totalMinutes)} — score ${Math.round(state.score)}.`);
       this.hooks.onSound("gameover");
       this.hooks.onChange(state);
+      this.autosaveNow();
     } else if (state.player.infection >= 100) {
       state.status = "gameover";
       state.paused = true;
@@ -1544,6 +1784,7 @@ export class GameEngine {
       this.notify("danger", "INFECTION TOTALE", `Jour ${gameDay(state.totalMinutes)} — score ${Math.round(state.score)}.`);
       this.hooks.onSound("gameover");
       this.hooks.onChange(state);
+      this.autosaveNow();
     } else if (state.base.health <= 0) {
       state.status = "gameover";
       state.paused = true;
@@ -1551,6 +1792,7 @@ export class GameEngine {
       this.notify("danger", "LA BASE EST TOMBÉE", `Jour ${gameDay(state.totalMinutes)} — score ${Math.round(state.score)}.`);
       this.hooks.onSound("gameover");
       this.hooks.onChange(state);
+      this.autosaveNow();
     }
   }
 
@@ -1589,7 +1831,13 @@ export class GameEngine {
   }
 
   roleCount(roleId) {
-    return this.state.base.roster.filter((survivor) => survivor.role === roleId && survivor.health > 20).length;
+    return this.state.base.roster.filter(
+      (survivor) =>
+        survivor.role === roleId &&
+        survivor.health > 20 &&
+        survivor.morale > 20 &&
+        !survivor.injured
+    ).length;
   }
 
   engineerDiscount() {

@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.0.1 — 2026-07-28 — Production Hardening
+
+### Corrigé
+
+- terrain procédural préservé sous la couche tactique ;
+- tir, mêlée et autofire utilisables pendant les fouilles et assauts de nid ;
+- défenseurs de lieu persistants, associés à leur objectif et non dupliqués après annulation ;
+- récupération renouvelable de métal et carburant après les vagues ;
+- vague nocturne active non remplacée au changement de jour ;
+- position et stationnement du fourgon persistants, sans téléportation ;
+- fourgon garé visible à sa vraie position, distance et trajet de retour disponibles ;
+- siège final sans nouvelles apparitions, victoire seulement après toutes les signatures et après contrôle des états létaux ;
+- saturation de la population infectée sans défenseurs fantômes ni objectif gratuit ;
+- sprint relâché de façon fiable pendant la pause et tutoriel impossible à reprendre derrière sa modale ;
+- rôles désactivés pour les survivants blessés ou démoralisés et soins autonomes du groupe ;
+- sauvegarde immédiate aux fins de partie et victoires ;
+- import et migration bornés contre les identifiants dupliqués, valeurs invalides, collections excessives et contenu HTML ;
+- valeurs de vague et temporisateurs bornés, consommation du générateur calculée sans boucle excessive ;
+- sauvegardes principale, secondaire et importées nettoyées des descriptions Google résiduelles ;
+- restauration des effets dérivés des infrastructures après migration ;
+- gestion fiable des changements et refus d’authentification de clé Google ;
+- focus, modales, navigation mobile, zones tactiles et annonces accessibles.
+
+### Production et conformité
+
+- requêtes Places limitées aux champs `id` et `location` ;
+- contenu descriptif Google exclu des sauvegardes et coordonnées limitées à 30 jours ;
+- consentement explicite avant la demande de géolocalisation ;
+- pages publiques de confidentialité et de conditions d’utilisation ;
+- cache PWA versionné au build avec revalidation attachée à l’événement ;
+- scripts Node multiplateformes, TypeScript verrouillé et CI Ubuntu/Windows ;
+- en-têtes de sécurité Vercel.
+
 ## 2.0.0 — 2026-07-28 — Community & Evacuation
 
 ### Dix mises à jour majeures

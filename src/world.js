@@ -177,7 +177,9 @@ export function createInitialState({ start, difficultyId = "normal", seed = unde
       active: false,
       condition: 0,
       maxCondition: 100,
-      distanceTravelled: 0
+      distanceTravelled: 0,
+      pos: vehiclePoi ? { ...vehiclePoi.pos } : { ...start },
+      parkedAt: vehiclePoi ? "wreck" : "base"
     },
     missions: {
       active: missions,
@@ -226,7 +228,7 @@ export function createInitialState({ start, difficultyId = "normal", seed = unde
       secondPulse: 0,
       generatorFuelPulse: 0
     },
-    randomState: worldSeed ^ 0xa5a5a5a5
+    randomState: (worldSeed ^ 0xa5a5a5a5) || 0x9e3779b9
   };
 }
 
@@ -321,6 +323,16 @@ export function generatePois(origin, random, count) {
 }
 
 export function withPoiFeatureDefaults(poi) {
+  const rawDefendersSpawned = poi.defendersSpawned;
+  const defendersSpawned = rawDefendersSpawned && typeof rawDefendersSpawned === "object"
+    ? {
+        scavenge: Boolean(rawDefendersSpawned.scavenge),
+        clearNest: Boolean(rawDefendersSpawned.clearNest)
+      }
+    : {
+        scavenge: Boolean(rawDefendersSpawned),
+        clearNest: Boolean(rawDefendersSpawned)
+      };
   return {
     ...poi,
     looted: Boolean(poi.looted),
@@ -332,6 +344,7 @@ export function withPoiFeatureDefaults(poi) {
     signalPartCollected: Boolean(poi.signalPartCollected),
     vehicleWreck: Boolean(poi.vehicleWreck),
     missionMarker: poi.missionMarker ?? null,
+    defendersSpawned,
     nest: {
       active: Boolean(poi.nest?.active),
       strength: Math.max(0, Math.min(3, Math.floor(Number(poi.nest?.strength ?? 0))))
@@ -392,6 +405,7 @@ export function createZombie({ origin, random, day = 1, difficultyId = "normal",
     target: null,
     heading: angle + Math.PI,
     wave,
+    defenderPoiId: null,
     stagger: 0,
     dead: false
   };

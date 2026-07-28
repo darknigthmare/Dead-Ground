@@ -39,6 +39,26 @@ function engineFor(state) {
   });
 }
 
+function defeatPoiDefendersWithPlayerCommands(state, engine, poiId) {
+  state.autoFire = false;
+  state.resources.ammo = Math.max(state.resources.ammo, 999);
+  state.player.health = state.player.maxHealth = 1_000_000;
+  state.timers.ambientSpawn = 1_000_000;
+  state.timers.nestSpawn = 1_000_000;
+  for (
+    let step = 0;
+    step < 600 && state.zombies.some((zombie) => !zombie.dead && zombie.defenderPoiId === poiId);
+    step += 1
+  ) {
+    if (state.player.fireCooldown <= 0) engine.fire();
+    engine.step(0.25);
+  }
+  assert.equal(
+    state.zombies.some((zombie) => !zombie.dead && zombie.defenderPoiId === poiId),
+    false
+  );
+}
+
 test("mise à jour 1 : initialise une communauté avec rôles réellement affectés", () => {
   const state = freshState();
   assert.equal(state.base.roster.length, 3);
@@ -180,8 +200,8 @@ test("mise à jour 8 : nettoyer un nid réduit la menace et rapporte du renseign
   assert.equal(engine.beginClearNest(), false, "aucun POI sélectionné ne doit lancer l’action");
   state.selectedPoiId = poi.id;
   assert.equal(engine.beginClearNest(), true);
-  for (const zombie of state.zombies) zombie.dead = true;
-  engine.updateActivity(state.activity.duration + 0.1);
+  defeatPoiDefendersWithPlayerCommands(state, engine, poi.id);
+  for (let step = 0; step < 80 && state.activity; step += 1) engine.step(0.25);
   assert.equal(poi.nest.active, false);
   assert.equal(state.nestsCleared, 1);
   assert.ok(state.resources.intel >= intelBefore + strength + 1);

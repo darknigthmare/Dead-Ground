@@ -91,13 +91,10 @@ Champs demandés :
 
 ```text
 id
-displayName
 location
-formattedAddress
-primaryType
-types
-googleMapsURI
 ```
+
+Le jeu ne demande donc aucun nom, adresse, type descriptif ni URI Google Maps. L’identifiant et la position servent uniquement à construire un objectif géographique ; son alias tactique et sa catégorie sont générés localement par Dead Ground.
 
 Le normaliseur écarte :
 
@@ -116,7 +113,7 @@ Après enregistrement d’une clé valide :
 2. la carte procédurale doit être remplacée par l’imagerie ;
 3. la recherche par adresse doit recentrer la sélection ;
 4. une nouvelle partie doit afficher un message indiquant le nombre de lieux réels ;
-5. les fiches correspondantes doivent porter la mention **Lieu réel** et conserver leur adresse ;
+5. les fiches correspondantes doivent porter la mention **Point géographique Google** avec un alias fictif, sans adresse Google ;
 6. les overlays doivent rester alignés pendant pan et zoom.
 
 En cas d’échec, le jeu revient automatiquement au terrain procédural.
@@ -154,6 +151,14 @@ Ajouter le domaine HTTPS exact de production aux restrictions, puis attendre la 
 ## Attributions
 
 Ne jamais masquer ou recouvrir les logos, mentions légales et attributions rendus par Google. Le layout réserve de l’espace pour eux et la couche visuelle du jeu ne doit pas les déplacer.
+
+## Persistance et information du joueur
+
+- l’identifiant de lieu peut être conservé ;
+- les coordonnées Google sont limitées à 30 jours dans une sauvegarde ;
+- les noms, adresses, types descriptifs et URI Google ne sont pas persistés ;
+- après expiration, Dead Ground remplace la position par une coordonnée procédurale ;
+- les pages [`privacy.html`](privacy.html) et [`terms.html`](terms.html) expliquent ce traitement au joueur.
 
 ## Validation de livraison
 
