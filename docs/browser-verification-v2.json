@@ -1,0 +1,49 @@
+{
+  "version": "2.0.0",
+  "validatedAt": "2026-07-28",
+  "target": "source",
+  "transport": "in-memory ES-module Chromium harness",
+  "moduleCount": 14,
+  "setup": {
+    "title": "DEAD GROUND",
+    "provider": "TERRAIN DE SECOURS PROCÉDURAL",
+    "hasContent": true
+  },
+  "desktop": {
+    "viewport": { "width": 1440, "height": 1000 },
+    "tabs": {
+      "base": true,
+      "expeditions": true,
+      "survivors": true,
+      "workshop": true,
+      "research": true,
+      "missions": true,
+      "journal": true
+    },
+    "actions": {
+      "builtWall": true,
+      "builtWorkshop": true,
+      "research": true,
+      "craft": true,
+      "deploy": true,
+      "wallLevel": 1,
+      "deployedTraps": 1
+    },
+    "bodyTextLength": 2284,
+    "horizontalOverflow": false,
+    "errorOverlay": false,
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  "mobile": {
+    "viewport": { "width": 390, "height": 844 },
+    "panelOpen": true,
+    "missionsHeadingVisible": true,
+    "horizontalOverflow": false,
+    "errorOverlay": false,
+    "consoleErrors": [],
+    "pageErrors": []
+  },
+  "automatedTests": { "passed": 48, "failed": 0 },
+  "status": "pass"
+}

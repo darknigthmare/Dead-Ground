@@ -1,0 +1,29 @@
+{
+  "name": "Dead Ground: Satellite Survival",
+  "short_name": "Dead Ground",
+  "description": "Survivez sur une carte satellite, gérez une communauté, établissez des avant-postes et organisez l’évacuation.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#070a08",
+  "theme_color": "#111a13",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
