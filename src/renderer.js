@@ -1,5 +1,10 @@
 import { POI_TYPES, ZOMBIE_TYPES } from "./constants.js";
 import { distanceMeters, offsetMeters } from "./geo.js";
+import {
+  drawSpriteFrame,
+  stableAnimationOffset,
+  spriteScaleForZoom
+} from "./sprites.js";
 
 const COLORS = Object.freeze({
   player: "#d8ff7a",
@@ -37,10 +42,11 @@ export function drawGameOverlay(ctx, project, state, viewport, options = {}) {
   drawBase(ctx, project, state, visible);
   drawTravelPath(ctx, project, state);
   drawPois(ctx, project, state, visible, options);
-  drawVehicle(ctx, project, state, visible);
-  drawZombies(ctx, project, state, visible);
+  drawVehicle(ctx, project, state, visible, options);
+  drawAnimatedCorpses(ctx, project, state, visible, options);
+  drawZombies(ctx, project, state, visible, options);
   drawEffects(ctx, project, state, visible);
-  drawPlayer(ctx, project, state, visible);
+  drawPlayer(ctx, project, state, visible, options);
   drawWeatherForeground(ctx, state, viewport);
 }
 
@@ -265,7 +271,7 @@ function drawPois(ctx, project, state, visible, options) {
   }
 }
 
-function drawZombies(ctx, project, state, visible) {
+function drawZombies(ctx, project, state, visible, options) {
   const typeColors = {
     walker: "#c5303b",
     runner: "#e14a3b",
@@ -282,53 +288,76 @@ function drawZombies(ctx, project, state, visible) {
     const config = ZOMBIE_TYPES[zombie.type] ?? ZOMBIE_TYPES.walker;
     const size = config.radius;
     const hurt = zombie.health < zombie.maxHealth;
+    const action = activeActorAnimation(state, zombie.id);
+    const clip = action?.animation === "special"
+      ? "special"
+      : action?.animation === "attack"
+        ? "attack"
+        : action?.animation === "hurt" || zombie.stagger > 0
+          ? "hurt"
+          : zombieIsMoving(zombie, state, config)
+            ? "move"
+            : "idle";
+    const heading = action?.heading ?? zombie.heading ?? 0;
+    const progress = action ? effectProgress(action) : undefined;
+    const scale = spriteScaleForZoom(options.zoom);
 
     ctx.save();
     ctx.translate(point.x, point.y);
-    ctx.rotate(zombie.heading || 0);
-    ctx.shadowColor = config.boss ? "rgba(255,34,61,.9)" : "rgba(0,0,0,.8)";
-    ctx.shadowBlur = config.boss ? 18 : 7;
-    ctx.fillStyle = zombie.wave && zombie.type === "walker" ? "#ff3948" : typeColors[zombie.type] ?? "#c5303b";
-    ctx.strokeStyle = config.boss ? "#ffcf5a" : "#320a0e";
-    ctx.lineWidth = config.boss ? 2.4 : 1.5;
+    const spriteDrawn = drawSpriteFrame(ctx, zombie.type, clip, heading, animationNow(options), {
+      displaySize: Math.max(zombie.type === "alpha" ? 62 : 32, size * 4.8 + 12) * scale,
+      offset: stableAnimationOffset(zombie.id),
+      progress,
+      reducedMotion: options.reducedMotion,
+      tint: config.boss ? "rgba(255,34,61,.8)" : "rgba(0,0,0,.7)",
+      shadowBlur: config.boss ? 15 : 6
+    });
+    if (!spriteDrawn) {
+      ctx.rotate(heading);
+      ctx.shadowColor = config.boss ? "rgba(255,34,61,.9)" : "rgba(0,0,0,.8)";
+      ctx.shadowBlur = config.boss ? 18 : 7;
+      ctx.fillStyle = zombie.wave && zombie.type === "walker" ? "#ff3948" : typeColors[zombie.type] ?? "#c5303b";
+      ctx.strokeStyle = config.boss ? "#ffcf5a" : "#320a0e";
+      ctx.lineWidth = config.boss ? 2.4 : 1.5;
 
-    if (zombie.type === "runner") {
-      ctx.beginPath();
-      ctx.moveTo(0, -size - 3);
-      ctx.lineTo(size, size + 3);
-      ctx.lineTo(0, size);
-      ctx.lineTo(-size, size + 3);
-      ctx.closePath();
-    } else if (zombie.type === "brute" || zombie.type === "armored") {
-      polygon(ctx, 0, 0, size + 2, zombie.type === "armored" ? 8 : 6, Math.PI / 6);
-    } else if (zombie.type === "screamer") {
-      polygon(ctx, 0, 0, size + 1, 4, Math.PI / 4);
-    } else if (zombie.type === "spitter") {
-      polygon(ctx, 0, 0, size + 1, 5, -Math.PI / 2);
-    } else if (zombie.type === "alpha") {
-      polygon(ctx, 0, 0, size + 2, 7, -Math.PI / 2);
-    } else {
-      ctx.beginPath();
-      ctx.arc(0, 0, size, 0, Math.PI * 2);
-    }
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    if (zombie.type === "armored") {
-      ctx.strokeStyle = "rgba(225,235,239,.65)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-size * .65, -size * .2);
-      ctx.lineTo(size * .65, -size * .2);
+      if (zombie.type === "runner") {
+        ctx.beginPath();
+        ctx.moveTo(0, -size - 3);
+        ctx.lineTo(size, size + 3);
+        ctx.lineTo(0, size);
+        ctx.lineTo(-size, size + 3);
+        ctx.closePath();
+      } else if (zombie.type === "brute" || zombie.type === "armored") {
+        polygon(ctx, 0, 0, size + 2, zombie.type === "armored" ? 8 : 6, Math.PI / 6);
+      } else if (zombie.type === "screamer") {
+        polygon(ctx, 0, 0, size + 1, 4, Math.PI / 4);
+      } else if (zombie.type === "spitter") {
+        polygon(ctx, 0, 0, size + 1, 5, -Math.PI / 2);
+      } else if (zombie.type === "alpha") {
+        polygon(ctx, 0, 0, size + 2, 7, -Math.PI / 2);
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, size, 0, Math.PI * 2);
+      }
+      ctx.fill();
       ctx.stroke();
-    }
+      ctx.shadowBlur = 0;
 
-    ctx.fillStyle = zombie.type === "spitter" ? "#d6ff9b" : "#f7e7c5";
-    ctx.beginPath();
-    ctx.arc(-2, -1, 1.1, 0, Math.PI * 2);
-    ctx.arc(2, -1, 1.1, 0, Math.PI * 2);
-    ctx.fill();
+      if (zombie.type === "armored") {
+        ctx.strokeStyle = "rgba(225,235,239,.65)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-size * .65, -size * .2);
+        ctx.lineTo(size * .65, -size * .2);
+        ctx.stroke();
+      }
+
+      ctx.fillStyle = zombie.type === "spitter" ? "#d6ff9b" : "#f7e7c5";
+      ctx.beginPath();
+      ctx.arc(-2, -1, 1.1, 0, Math.PI * 2);
+      ctx.arc(2, -1, 1.1, 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.restore();
 
     if (hurt || ["brute", "armored", "alpha"].includes(zombie.type)) {
@@ -342,7 +371,7 @@ function drawZombies(ctx, project, state, visible) {
   }
 }
 
-function drawVehicle(ctx, project, state, visible) {
+function drawVehicle(ctx, project, state, visible, options) {
   if (!state.vehicle?.repaired || state.vehicle.active) return;
   const parkedPosition = state.vehicle.pos;
   if (!parkedPosition) return;
@@ -350,30 +379,24 @@ function drawVehicle(ctx, project, state, visible) {
   if (!point || !visible(point, 40)) return;
 
   const conditionRatio = Math.max(0, Math.min(1, state.vehicle.condition / Math.max(1, state.vehicle.maxCondition)));
+  const heading = state.vehicle.heading ?? -0.32;
+  const clip = conditionRatio <= 0 ? "disabled" : "parked";
+  const scale = spriteScaleForZoom(options.zoom);
   ctx.save();
   ctx.translate(point.x, point.y);
-  ctx.rotate(-0.32);
-  ctx.shadowColor = "rgba(0,0,0,.8)";
-  ctx.shadowBlur = 9;
-  ctx.fillStyle = conditionRatio <= 0 ? "#4b5457" : COLORS.vehicle;
-  ctx.strokeStyle = conditionRatio < 0.25 ? COLORS.danger : "rgba(27,18,8,.92)";
-  ctx.lineWidth = 1.8;
-  roundRect(ctx, -7, -12, 14, 24, 4);
-  ctx.fill();
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  ctx.fillStyle = "rgba(20,30,34,.84)";
-  roundRect(ctx, -4.8, -8.5, 9.6, 6.5, 1.8);
-  ctx.fill();
-  ctx.fillStyle = "rgba(245,231,190,.85)";
-  ctx.fillRect(-4.5, 4.5, 9, 3.2);
-  ctx.fillStyle = "#15191b";
-  ctx.fillRect(-9, -8, 2.5, 6);
-  ctx.fillRect(6.5, -8, 2.5, 6);
-  ctx.fillRect(-9, 3, 2.5, 6);
-  ctx.fillRect(6.5, 3, 2.5, 6);
+  const spriteDrawn = drawSpriteFrame(ctx, "vehicle", clip, heading, animationNow(options), {
+    displaySize: 58 * scale,
+    reducedMotion: options.reducedMotion,
+    tint: conditionRatio < 0.25 ? COLORS.danger : "rgba(0,0,0,.7)",
+    shadowBlur: 8
+  });
+  if (!spriteDrawn) {
+    ctx.rotate(heading);
+    drawVehicleFallback(ctx, conditionRatio, 0.72);
+  }
   ctx.restore();
+
+  if (conditionRatio > 0 && conditionRatio < 0.35) drawVehicleSmoke(ctx, point, conditionRatio, options.reducedMotion);
 
   ctx.save();
   ctx.fillStyle = "rgba(0,0,0,.78)";
@@ -383,42 +406,78 @@ function drawVehicle(ctx, project, state, visible) {
   ctx.restore();
 }
 
-function drawPlayer(ctx, project, state, visible) {
+function drawPlayer(ctx, project, state, visible, options) {
   const point = project(state.player.pos);
   if (!point || !visible(point)) return;
+  const action = activeActorAnimation(state, "player");
+  const terminal = state.player.health <= 0 || state.player.infection >= 100;
+  const clip = terminal
+    ? "death"
+    : action?.animation
+      ? action.animation
+      : state.player.invulnerability > 0
+        ? "hurt"
+        : state.player.target && !state.activity
+          ? state.movementMode === "sprint" ? "sprint" : "walk"
+          : "idle";
+  const heading = action?.heading ?? state.player.heading ?? 0;
+  const progress = action ? effectProgress(action) : undefined;
+  const scale = spriteScaleForZoom(options.zoom);
+  const useVehicle = state.vehicle.active && !terminal;
   ctx.save();
   ctx.translate(point.x, point.y);
-  ctx.rotate(state.player.heading || 0);
-  ctx.shadowColor = state.vehicle.active ? "rgba(108,167,255,.9)" : "rgba(216,255,122,.8)";
-  ctx.shadowBlur = 12;
-  ctx.fillStyle = state.vehicle.active ? "#80b5ff" : COLORS.player;
-  ctx.strokeStyle = "rgba(0,0,0,.9)";
-  ctx.lineWidth = 2;
-  if (state.vehicle.active) {
-    roundRect(ctx, -10, -15, 20, 30, 5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "rgba(8,20,35,.8)";
-    ctx.fillRect(-7, -9, 14, 7);
-    ctx.fillStyle = "#d7e8ff";
-    ctx.fillRect(-12, -9, 3, 7);
-    ctx.fillRect(9, -9, 3, 7);
-    ctx.fillRect(-12, 5, 3, 7);
-    ctx.fillRect(9, 5, 3, 7);
+  let spriteDrawn = false;
+  if (useVehicle) {
+    const conditionRatio = Math.max(0, Math.min(1, state.vehicle.condition / Math.max(1, state.vehicle.maxCondition)));
+    spriteDrawn = drawSpriteFrame(
+      ctx,
+      "vehicle",
+      state.player.target ? "drive" : "idle",
+      state.vehicle.heading ?? state.player.heading ?? 0,
+      animationNow(options),
+      {
+        displaySize: 62 * scale,
+        offset: stableAnimationOffset("vehicle-active"),
+        reducedMotion: options.reducedMotion,
+        tint: conditionRatio < 0.25 ? COLORS.danger : "rgba(108,167,255,.75)",
+        shadowBlur: 10
+      }
+    );
+    if (conditionRatio < 0.35) drawVehicleSmoke(ctx, { x: 0, y: 0 }, conditionRatio, options.reducedMotion);
   } else {
-    ctx.beginPath();
-    ctx.moveTo(0, -12);
-    ctx.lineTo(8, 9);
-    ctx.lineTo(0, 6);
-    ctx.lineTo(-8, 9);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = COLORS.playerInner;
-    ctx.beginPath();
-    ctx.arc(0, 1, 3, 0, Math.PI * 2);
-    ctx.fill();
+    spriteDrawn = drawSpriteFrame(ctx, "player", clip, heading, animationNow(options), {
+      displaySize: 48 * scale,
+      offset: stableAnimationOffset("player"),
+      progress,
+      reducedMotion: options.reducedMotion,
+      tint: terminal ? COLORS.danger : "rgba(216,255,122,.75)",
+      shadowBlur: 10
+    });
+  }
+  if (!spriteDrawn) {
+    ctx.rotate(useVehicle ? state.vehicle.heading ?? state.player.heading ?? 0 : heading);
+    ctx.shadowColor = useVehicle ? "rgba(108,167,255,.9)" : "rgba(216,255,122,.8)";
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = useVehicle ? "#80b5ff" : COLORS.player;
+    ctx.strokeStyle = "rgba(0,0,0,.9)";
+    ctx.lineWidth = 2;
+    if (useVehicle) {
+      drawVehicleFallback(ctx, Math.max(0, state.vehicle.condition / Math.max(1, state.vehicle.maxCondition)), 1);
+    } else {
+      ctx.beginPath();
+      ctx.moveTo(0, -12);
+      ctx.lineTo(8, 9);
+      ctx.lineTo(0, 6);
+      ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = COLORS.playerInner;
+      ctx.beginPath();
+      ctx.arc(0, 1, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   ctx.restore();
 
@@ -437,6 +496,113 @@ function drawPlayer(ctx, project, state, visible) {
     ctx.arc(point.x, point.y, 16 + state.player.invulnerability * 9, 0, Math.PI * 2);
     ctx.stroke();
   }
+}
+
+function drawAnimatedCorpses(ctx, project, state, visible, options) {
+  for (const effect of state.effects) {
+    if (effect.type !== "kill" || !effect.entityType) continue;
+    const point = project(effect.to);
+    if (!point || !visible(point)) continue;
+    ctx.save();
+    ctx.translate(point.x, point.y);
+    const alpha = Math.min(1, Math.max(0.22, effect.ttl / Math.max(0.01, effect.maxTtl) * 1.6));
+    const spriteDrawn = drawSpriteFrame(ctx, effect.entityType, "death", effect.heading ?? 0, animationNow(options), {
+      displaySize: (effect.entityType === "alpha" ? 66 : effect.entityType === "armored" ? 52 : effect.entityType === "brute" ? 48 : 40) * spriteScaleForZoom(options.zoom),
+      progress: effectProgress(effect),
+      reducedMotion: options.reducedMotion,
+      alpha,
+      tint: effect.entityType === "alpha" ? "rgba(255,34,61,.75)" : "rgba(0,0,0,.62)",
+      shadowBlur: effect.entityType === "alpha" ? 12 : 5
+    });
+    if (!spriteDrawn) {
+      const size = effect.entityType === "alpha" ? 1.45 : effect.entityType === "brute" || effect.entityType === "armored" ? 1.18 : 1;
+      ctx.rotate((effect.heading ?? 0) + Math.PI / 2);
+      ctx.globalAlpha = alpha * .72;
+      ctx.fillStyle = effect.entityType === "alpha" ? "#8b2632" : "#53262b";
+      ctx.strokeStyle = "rgba(0,0,0,.82)";
+      ctx.lineWidth = 2;
+      roundRect(ctx, -7 * size, -12 * size, 14 * size, 24 * size, 6 * size);
+      ctx.fill();
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -13 * size, 5 * size, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function activeActorAnimation(state, actorId) {
+  for (let index = state.effects.length - 1; index >= 0; index -= 1) {
+    const effect = state.effects[index];
+    if (effect.actorId === actorId && effect.animation && effect.ttl > 0) return effect;
+  }
+  return null;
+}
+
+function effectProgress(effect) {
+  return Math.max(0, Math.min(1, 1 - effect.ttl / Math.max(0.001, effect.maxTtl)));
+}
+
+function animationNow(options) {
+  return Number.isFinite(options.animationTimeMs) ? options.animationTimeMs : performanceNow();
+}
+
+function zombieIsMoving(zombie, state, config) {
+  if (zombie.stagger > 0 || !zombie.target) return false;
+  const target = zombie.target === "player" ? state.player.pos : state.base.pos;
+  const distance = distanceMeters(zombie.pos, target);
+  const closeRange = zombie.target === "player"
+    ? 1.7 + config.radius * 0.11
+    : state.base.wallMaxHealth > 0 && state.base.wallHealth > 0
+      ? state.base.radius + 1.5
+      : 4.5;
+  if (zombie.type === "spitter" && distance <= config.rangedRange && distance > closeRange + 3) return false;
+  return distance > closeRange;
+}
+
+function drawVehicleFallback(ctx, conditionRatio, scale) {
+  ctx.shadowColor = "rgba(0,0,0,.8)";
+  ctx.shadowBlur = 9;
+  ctx.fillStyle = conditionRatio <= 0 ? "#4b5457" : COLORS.vehicle;
+  ctx.strokeStyle = conditionRatio < 0.25 ? COLORS.danger : "rgba(27,18,8,.92)";
+  ctx.lineWidth = 1.8;
+  roundRect(ctx, -10 * scale, -15 * scale, 20 * scale, 30 * scale, 5 * scale);
+  ctx.fill();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  ctx.fillStyle = "rgba(20,30,34,.84)";
+  roundRect(ctx, -7 * scale, -9 * scale, 14 * scale, 7 * scale, 2 * scale);
+  ctx.fill();
+  ctx.fillStyle = "rgba(245,231,190,.85)";
+  ctx.fillRect(-6.5 * scale, 5 * scale, 13 * scale, 3.5 * scale);
+  ctx.fillStyle = "#15191b";
+  ctx.fillRect(-12 * scale, -9 * scale, 3 * scale, 7 * scale);
+  ctx.fillRect(9 * scale, -9 * scale, 3 * scale, 7 * scale);
+  ctx.fillRect(-12 * scale, 5 * scale, 3 * scale, 7 * scale);
+  ctx.fillRect(9 * scale, 5 * scale, 3 * scale, 7 * scale);
+}
+
+function drawVehicleSmoke(ctx, point, conditionRatio, reducedMotion) {
+  const now = reducedMotion ? 0 : performanceNow();
+  ctx.save();
+  for (let index = 0; index < 3; index += 1) {
+    const phase = ((now * 0.00035 + index * .31) % 1);
+    ctx.globalAlpha = (1 - phase) * (0.52 - conditionRatio);
+    ctx.fillStyle = "#77817c";
+    ctx.beginPath();
+    ctx.arc(
+      point.x - 6 + Math.sin(index * 2.7 + phase * 4) * 4,
+      point.y + 8 - phase * 21,
+      3 + phase * 5,
+      0,
+      Math.PI * 2
+    );
+    ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawEffects(ctx, project, state, visible) {

@@ -6,7 +6,7 @@ import {
 import { stableNoise } from "../rng.js";
 
 export class FallbackMapAdapter {
-  constructor({ container, center, onClick, onStatus, seed = 1337 }) {
+  constructor({ container, center, onClick, onStatus, seed = 1337, reducedMotion = false }) {
     this.container = container;
     this.origin = { ...center };
     this.center = { ...center };
@@ -16,6 +16,8 @@ export class FallbackMapAdapter {
     this.onClick = onClick ?? (() => {});
     this.onStatus = onStatus ?? (() => {});
     this.seed = seed >>> 0;
+    this.reducedMotion = Boolean(reducedMotion);
+    this.animationTimeMs = 0;
     this.pixelsPerMeter = 1.05;
     this.dragging = false;
     this.dragMoved = false;
@@ -63,6 +65,14 @@ export class FallbackMapAdapter {
 
   setSnapshot(snapshot) {
     this.snapshot = snapshot;
+  }
+
+  setReducedMotion(value) {
+    this.reducedMotion = Boolean(value);
+  }
+
+  setAnimationTime(value) {
+    if (Number.isFinite(value)) this.animationTimeMs = value;
   }
 
   panTo(position, zoom) {
@@ -127,7 +137,12 @@ export class FallbackMapAdapter {
         (position) => this.project(position),
         this.snapshot,
         { width: this.width, height: this.height },
-        { zoom: 17 + this.pixelsPerMeter, clear: false }
+        {
+          zoom: 17 + this.pixelsPerMeter,
+          clear: false,
+          reducedMotion: this.reducedMotion,
+          animationTimeMs: this.animationTimeMs
+        }
       );
     }
   }

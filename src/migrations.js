@@ -276,6 +276,7 @@ export function migrateState(rawState) {
     condition: clamp(vehicleCondition, 0, 100),
     maxCondition: 100,
     distanceTravelled: clamp(finiteOr(state.vehicle?.distanceTravelled, 0), 0, MAX_DISTANCE_VALUE),
+    heading: clamp(finiteOr(state.vehicle?.heading, state.player?.heading ?? -0.32), -Math.PI * 2, Math.PI * 2),
     pos: readPosition(state.vehicle?.pos) ?? { ...basePosition },
     parkedAt: safeId(state.vehicle?.parkedAt) || "base"
   };

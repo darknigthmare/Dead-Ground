@@ -57,6 +57,8 @@ export class GameEngine {
     this.running = false;
     this.lastFrameAt = 0;
     this.frameHandle = null;
+    this.effectSequence = 0;
+    this.animationTime = 0;
     this.ensureVehicleLocation();
   }
 
@@ -73,7 +75,7 @@ export class GameEngine {
       const dt = clamp((now - this.lastFrameAt) / 1000, 0, 0.12);
       this.lastFrameAt = now;
       this.step(dt);
-      this.hooks.onFrame(this.state);
+      this.hooks.onFrame(this.state, { animationTimeMs: this.animationTime * 1000 });
       this.frameHandle = requestAnimationFrame(frame);
     };
     this.frameHandle = requestAnimationFrame(frame);
@@ -90,12 +92,14 @@ export class GameEngine {
   step(dt) {
     if (!Number.isFinite(dt) || dt <= 0) return;
     const state = this.state;
-    if (state.status !== "playing" || state.paused) {
-      this.updateTransient(dt);
+    const clampedDt = clamp(dt, 0, 0.25);
+    if (state.status === "playing" && state.paused) return;
+    this.animationTime += clampedDt;
+    if (state.status !== "playing") {
+      this.updateTransient(clampedDt);
       return;
     }
 
-    const clampedDt = clamp(dt, 0, 0.25);
     const previousMinutes = state.totalMinutes;
     const gameMinutesDelta = clampedDt * MINUTES_PER_REAL_SECOND;
     state.totalMinutes += gameMinutesDelta;
@@ -257,11 +261,18 @@ export class GameEngine {
     }
 
     const damage = 31 + state.base.structures.workshop * 4 + (this.hasResearch("ballistics") ? 5 : 0);
+    const actionHeading = bearingRadians(state.player.pos, nearest.entity.pos);
     state.player.stamina = Math.max(0, state.player.stamina - 9);
     state.player.meleeCooldown = 0.72;
+    state.player.heading = actionHeading;
     state.noise = clamp(state.noise + 4, 0, 100);
     this.damageZombie(nearest.entity, damage, "melee");
     this.addEffect("melee", state.player.pos, nearest.entity.pos, 0.18);
+    this.addEffect("actor-action", state.player.pos, nearest.entity.pos, 0.58, {
+      actorId: "player",
+      animation: "melee",
+      heading: actionHeading
+    });
     this.hooks.onSound("melee");
     return true;
   }
@@ -834,6 +845,7 @@ export class GameEngine {
       state.distanceTravelled += movement.travelled;
 
       if (state.vehicle.active) {
+        state.vehicle.heading = player.heading;
         const efficiency = this.hasResearch("logistics") ? 0.72 : 1;
         const fuelUsed = (movement.travelled / 1000) * VEHICLE_DEFINITION.fuelPerKilometer * efficiency;
         state.resources.fuel = Math.max(0, state.resources.fuel - fuelUsed);
@@ -846,6 +858,13 @@ export class GameEngine {
         if (state.resources.fuel <= 0 || state.vehicle.condition <= 0) {
           state.vehicle.active = false;
           state.vehicle.pos = { ...player.pos };
+          if (state.vehicle.condition <= 0) {
+            this.addEffect("vehicle-disabled", player.pos, player.pos, 0.8, {
+              actorId: "vehicle",
+              animation: "disabled",
+              heading: state.vehicle.heading ?? player.heading
+            });
+          }
           this.notify("danger", state.resources.fuel <= 0 ? "Carburant épuisé" : "Véhicule immobilisé", "Le trajet continue à pied.");
         }
       } else if (sprinting) {
@@ -1405,8 +1424,14 @@ export class GameEngine {
           summoned.pos = destinationPoint(zombie.pos, this.randomBetween(0, Math.PI * 2), this.randomBetween(45, 90));
           state.zombies.push(summoned);
         }
+        this.addEffect("actor-action", zombie.pos, zombie.pos, 0.58, {
+          actorId: zombie.id,
+          animation: "special",
+          heading: zombie.heading ?? 0
+        });
         this.addEffect("scream", zombie.pos, zombie.pos, 0.55);
         this.hooks.onSound("scream");
+        continue;
       }
 
       if (zombie.target === "player") {
@@ -1414,12 +1439,24 @@ export class GameEngine {
         if (zombie.type === "spitter" && distanceToPlayer <= config.rangedRange && distanceToPlayer > attackDistance + 3) {
           if (zombie.attackCooldown <= 0) {
             zombie.attackCooldown = config.attackEvery;
+            zombie.heading = bearingRadians(zombie.pos, state.player.pos);
+            this.addEffect("actor-action", zombie.pos, state.player.pos, 0.58, {
+              actorId: zombie.id,
+              animation: "special",
+              heading: zombie.heading
+            });
             this.damagePlayer(config.damage * difficulty.zombieDamage, zombie.type);
             this.addEffect("spit", zombie.pos, state.player.pos, 0.34);
           }
         } else if (distanceToPlayer <= attackDistance) {
           if (zombie.attackCooldown <= 0) {
             zombie.attackCooldown = config.attackEvery;
+            zombie.heading = bearingRadians(zombie.pos, state.player.pos);
+            this.addEffect("actor-action", zombie.pos, state.player.pos, 0.5, {
+              actorId: zombie.id,
+              animation: "attack",
+              heading: zombie.heading
+            });
             this.damagePlayer(config.damage * difficulty.zombieDamage, zombie.type);
           }
         } else if (zombie.stagger <= 0) {
@@ -1434,6 +1471,12 @@ export class GameEngine {
         if (zombie.type === "spitter" && distanceToBase <= config.rangedRange && distanceToBase > attackDistance + 4) {
           if (zombie.attackCooldown <= 0) {
             zombie.attackCooldown = config.attackEvery;
+            zombie.heading = bearingRadians(zombie.pos, targetPos);
+            this.addEffect("actor-action", zombie.pos, targetPos, 0.58, {
+              actorId: zombie.id,
+              animation: "special",
+              heading: zombie.heading
+            });
             const damage = config.damage * difficulty.zombieDamage * generatorDefense;
             if (wallPresent) state.base.wallHealth = Math.max(0, state.base.wallHealth - damage);
             else state.base.health = Math.max(0, state.base.health - damage);
@@ -1442,6 +1485,12 @@ export class GameEngine {
         } else if (distanceToBase <= attackDistance) {
           if (zombie.attackCooldown <= 0) {
             zombie.attackCooldown = config.attackEvery;
+            zombie.heading = bearingRadians(zombie.pos, targetPos);
+            this.addEffect("actor-action", zombie.pos, targetPos, 0.5, {
+              actorId: zombie.id,
+              animation: "attack",
+              heading: zombie.heading
+            });
             const damage = config.damage * difficulty.zombieDamage * generatorDefense;
             if (wallPresent) {
               state.base.wallHealth = Math.max(0, state.base.wallHealth - damage);
@@ -1642,8 +1691,14 @@ export class GameEngine {
     const damage = (34 + workshopBonus) * difficulty.playerDamage * researchMultiplier * (critical ? 1.8 : 1);
     state.resources.ammo -= 1;
     state.player.fireCooldown = automated ? 0.68 : 0.42;
+    state.player.heading = bearingRadians(state.player.pos, nearest.entity.pos);
     state.noise = clamp(state.noise + (automated ? 7 : 10) * weather.playerNoise, 0, 100);
     state.threat = clamp(state.threat + 0.35, 0, 100);
+    this.addEffect("actor-action", state.player.pos, nearest.entity.pos, 0.34, {
+      actorId: "player",
+      animation: "fire",
+      heading: state.player.heading
+    });
 
     if (this.random() <= hitChance) {
       this.damageZombie(nearest.entity, damage, "gun");
@@ -1663,7 +1718,12 @@ export class GameEngine {
     const armor = source === "trap" ? 0 : config.armor ?? 0;
     zombie.health -= amount * (1 - armor);
     zombie.stagger = source === "melee" ? 0.35 : source === "trap" ? 0.55 : 0.14;
-    this.addEffect("hit", zombie.pos, zombie.pos, 0.2);
+    this.addEffect("hit", zombie.pos, zombie.pos, 0.2, {
+      actorId: zombie.id,
+      animation: "hurt",
+      entityType: zombie.type,
+      heading: zombie.heading ?? 0
+    });
 
     if (zombie.health <= 0) {
       zombie.dead = true;
@@ -1676,7 +1736,12 @@ export class GameEngine {
       }
       if (zombie.wave) this.state.wave.defeated += 1;
       if (this.random() < 0.08) this.state.resources.ammo += 1;
-      this.addEffect("kill", zombie.pos, zombie.pos, config.boss ? 0.8 : 0.45);
+      this.addEffect("kill", zombie.pos, zombie.pos, config.boss ? 1.2 : 0.82, {
+        actorId: zombie.id,
+        animation: "death",
+        entityType: zombie.type,
+        heading: zombie.heading ?? 0
+      });
       this.hooks.onSound("kill");
     }
   }
@@ -1694,6 +1759,11 @@ export class GameEngine {
         state.vehicle.active = false;
         state.vehicle.pos = { ...state.player.pos };
         this.updateVehicleParking();
+        this.addEffect("vehicle-disabled", state.player.pos, state.player.pos, 0.8, {
+          actorId: "vehicle",
+          animation: "disabled",
+          heading: state.vehicle.heading ?? state.player.heading
+        });
         this.notify("danger", "FOURGON HORS SERVICE", "Le blindage a cédé. Réparez-le avec un kit.");
       }
     }
@@ -1715,7 +1785,11 @@ export class GameEngine {
       state.player.injury = zombieType === "alpha" || damage >= 16 ? "fracture" : "sprain";
     }
 
-    this.addEffect("player-hit", state.player.pos, state.player.pos, 0.35);
+    this.addEffect("player-hit", state.player.pos, state.player.pos, 0.35, {
+      actorId: "player",
+      animation: "hurt",
+      heading: state.player.heading ?? 0
+    });
     this.hooks.onSound("hurt");
   }
 
@@ -1770,6 +1844,11 @@ export class GameEngine {
     const { state } = this;
     if (state.status !== "playing") return;
     if (state.player.health <= 0) {
+      this.addEffect("actor-action", state.player.pos, state.player.pos, 1.2, {
+        actorId: "player",
+        animation: "death",
+        heading: state.player.heading ?? 0
+      });
       state.status = "gameover";
       state.paused = true;
       this.log("gameover", "Le survivant a succombé aux infectés.");
@@ -1778,6 +1857,11 @@ export class GameEngine {
       this.hooks.onChange(state);
       this.autosaveNow();
     } else if (state.player.infection >= 100) {
+      this.addEffect("actor-action", state.player.pos, state.player.pos, 1.2, {
+        actorId: "player",
+        animation: "death",
+        heading: state.player.heading ?? 0
+      });
       state.status = "gameover";
       state.paused = true;
       this.log("gameover", "La contamination a atteint un stade irréversible.");
@@ -1882,14 +1966,15 @@ export class GameEngine {
     if (this.state.notifications.length > 5) this.state.notifications.length = 5;
   }
 
-  addEffect(type, from, to, ttl) {
+  addEffect(type, from, to, ttl, metadata = {}) {
     this.state.effects.push({
-      id: `fx-${Date.now().toString(36)}-${Math.floor(this.random() * 1e6).toString(36)}`,
+      id: `fx-${(++this.effectSequence).toString(36)}`,
       type,
       from: { ...from },
       to: { ...to },
       ttl,
-      maxTtl: ttl
+      maxTtl: ttl,
+      ...metadata
     });
   }
 }

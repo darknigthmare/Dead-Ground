@@ -155,13 +155,15 @@ export class GoogleMapAdapter {
     }
   }
 
-  constructor({ container, center, onClick, onStatus }) {
+  constructor({ container, center, onClick, onStatus, reducedMotion = false }) {
     this.container = container;
     this.onClick = onClick ?? (() => {});
     this.onStatus = onStatus ?? (() => {});
     this.snapshot = null;
     this.selection = center;
     this.mode = "select";
+    this.reducedMotion = Boolean(reducedMotion);
+    this.animationTimeMs = 0;
     this.projection = null;
     this.destroyed = false;
     this.canvas = null;
@@ -283,6 +285,15 @@ export class GoogleMapAdapter {
     this.render();
   }
 
+  setReducedMotion(value) {
+    this.reducedMotion = Boolean(value);
+    this.render();
+  }
+
+  setAnimationTime(value) {
+    if (Number.isFinite(value)) this.animationTimeMs = value;
+  }
+
   panTo(position, zoom) {
     this.map.panTo(position);
     if (Number.isFinite(zoom)) this.map.setZoom(zoom);
@@ -344,7 +355,11 @@ export class GoogleMapAdapter {
     if (this.mode === "select") {
       drawSelectionOverlay(this.ctx, project, this.selection, { width, height });
     } else {
-      drawGameOverlay(this.ctx, project, this.snapshot, { width, height }, { zoom: this.map.getZoom() ?? 17 });
+      drawGameOverlay(this.ctx, project, this.snapshot, { width, height }, {
+        zoom: this.map.getZoom() ?? 17,
+        reducedMotion: this.reducedMotion,
+        animationTimeMs: this.animationTimeMs
+      });
     }
   }
 

@@ -1,0 +1,486 @@
+{
+  "format": "dead-ground-sprite-atlas-v1",
+  "source": "Original OpenAI-generated masters, locally normalized and animated",
+  "directions": [
+    "n",
+    "ne",
+    "e",
+    "se",
+    "s",
+    "sw",
+    "w",
+    "nw"
+  ],
+  "atlases": {
+    "player": {
+      "id": "player",
+      "assetPath": "./src/assets/sprites/player-survivor.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 4032,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 5,
+          "loop": true
+        },
+        "walk": {
+          "row": 1,
+          "frames": 8,
+          "fps": 10,
+          "loop": true
+        },
+        "sprint": {
+          "row": 2,
+          "frames": 8,
+          "fps": 14,
+          "loop": true
+        },
+        "fire": {
+          "row": 3,
+          "frames": 6,
+          "fps": 18,
+          "loop": false
+        },
+        "melee": {
+          "row": 4,
+          "frames": 8,
+          "fps": 14,
+          "loop": false
+        },
+        "hurt": {
+          "row": 5,
+          "frames": 4,
+          "fps": 14,
+          "loop": false
+        },
+        "death": {
+          "row": 6,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        }
+      }
+    },
+    "walker": {
+      "id": "walker",
+      "assetPath": "./src/assets/sprites/infected-walker.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 2880,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 8,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 6,
+          "fps": 8,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 4,
+          "fps": 14,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        }
+      }
+    },
+    "runner": {
+      "id": "runner",
+      "assetPath": "./src/assets/sprites/infected-runner.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 2880,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 6,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 14,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 6,
+          "fps": 12,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 4,
+          "fps": 16,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 12,
+          "loop": false
+        }
+      }
+    },
+    "brute": {
+      "id": "brute",
+      "assetPath": "./src/assets/sprites/infected-brute.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 2880,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 6,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 8,
+          "fps": 8,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 4,
+          "fps": 12,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        }
+      }
+    },
+    "screamer": {
+      "id": "screamer",
+      "assetPath": "./src/assets/sprites/infected-screamer.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 3456,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 9,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 6,
+          "fps": 10,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 4,
+          "fps": 14,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        },
+        "special": {
+          "row": 5,
+          "frames": 8,
+          "fps": 14,
+          "loop": false
+        }
+      }
+    },
+    "spitter": {
+      "id": "spitter",
+      "assetPath": "./src/assets/sprites/infected-spitter.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 3456,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 6,
+          "fps": 9,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 4,
+          "fps": 14,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        },
+        "special": {
+          "row": 5,
+          "frames": 8,
+          "fps": 14,
+          "loop": false
+        }
+      }
+    },
+    "armored": {
+      "id": "armored",
+      "assetPath": "./src/assets/sprites/infected-armored.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 576,
+      "height": 2880,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 4,
+          "fps": 3,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 5,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 8,
+          "fps": 8,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 5,
+          "fps": 12,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 8,
+          "fps": 9,
+          "loop": false
+        }
+      }
+    },
+    "alpha": {
+      "id": "alpha",
+      "assetPath": "./src/assets/sprites/infected-alpha.png",
+      "cell": 72,
+      "directions": [
+        "n",
+        "ne",
+        "e",
+        "se",
+        "s",
+        "sw",
+        "w",
+        "nw"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated articulated 3x3 key poses",
+      "width": 864,
+      "height": 2880,
+      "clips": {
+        "idle": {
+          "row": 0,
+          "frames": 6,
+          "fps": 4,
+          "loop": true
+        },
+        "move": {
+          "row": 1,
+          "frames": 8,
+          "fps": 7,
+          "loop": true
+        },
+        "attack": {
+          "row": 2,
+          "frames": 8,
+          "fps": 10,
+          "loop": false
+        },
+        "hurt": {
+          "row": 3,
+          "frames": 5,
+          "fps": 14,
+          "loop": false
+        },
+        "death": {
+          "row": 4,
+          "frames": 12,
+          "fps": 10,
+          "loop": false
+        }
+      }
+    },
+    "vehicle": {
+      "id": "vehicle",
+      "assetPath": "./src/assets/sprites/vehicle-expedition.png",
+      "cell": 96,
+      "directions": [
+        "n"
+      ],
+      "layout": "direction-major, then clip row, then frame column",
+      "animationSource": "OpenAI-generated rigid orthographic master",
+      "width": 576,
+      "height": 384,
+      "clips": {
+        "parked": {
+          "row": 0,
+          "frames": 1,
+          "fps": 1,
+          "loop": false
+        },
+        "idle": {
+          "row": 1,
+          "frames": 4,
+          "fps": 6,
+          "loop": true
+        },
+        "drive": {
+          "row": 2,
+          "frames": 6,
+          "fps": 12,
+          "loop": true
+        },
+        "disabled": {
+          "row": 3,
+          "frames": 1,
+          "fps": 1,
+          "loop": false
+        }
+      }
+    }
+  }
+}

@@ -117,7 +117,7 @@ export class GameUI {
             <div class="clock-main"><span id="day-label">JOUR 1</span><strong id="clock-label">08:00</strong></div>
             <div id="day-state" class="state-chip">JOUR</div>
           </div>
-          <div id="resource-strip" class="resource-strip hud-card"></div>
+          <div id="resource-strip" class="resource-strip hud-card" role="region" aria-label="Ressources, défilement horizontal" tabindex="0"></div>
           <div id="weather-card" class="weather-card hud-card" role="group" title="Conditions météo">
             <span id="weather-icon">☀</span><div><small>MÉTÉO</small><strong id="weather-label">Ciel clair</strong></div>
           </div>

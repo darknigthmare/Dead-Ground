@@ -178,6 +178,7 @@ export function createInitialState({ start, difficultyId = "normal", seed = unde
       condition: 0,
       maxCondition: 100,
       distanceTravelled: 0,
+      heading: -0.32,
       pos: vehiclePoi ? { ...vehiclePoi.pos } : { ...start },
       parkedAt: vehiclePoi ? "wreck" : "base"
     },

@@ -20,6 +20,10 @@ import {
   resetGoogleMapsLoader
 } from "./maps/google-map.js";
 import { FallbackMapAdapter } from "./maps/fallback-map.js";
+import {
+  preloadSpriteAtlases,
+  spriteAtlasStatus
+} from "./sprites.js";
 
 const appRoot = document.querySelector("#app");
 let settings = loadSettings();
@@ -100,7 +104,10 @@ await initialize();
 async function initialize() {
   ui.setLoading(true);
   ui.renderSetup({ selectedStart, hasSave: hasSave(), settings });
-  await initializeMap();
+  await Promise.all([
+    initializeMap(),
+    preloadSpriteAtlases()
+  ]);
   ui.setPhase("setup");
   ui.renderSetup({ selectedStart, hasSave: hasSave(), settings });
   ui.setLoading(false);
@@ -119,7 +126,8 @@ async function initializeMap({ preserveView = false } = {}) {
     apiKey: settings.googleMapsApiKey,
     onClick: handleMapClick,
     onStatus: (status) => ui.setMapStatus(status),
-    seed: currentState?.seed ?? 1337
+    seed: currentState?.seed ?? 1337,
+    reducedMotion: settings.reducedMotion
   };
 
   if (settings.googleMapsApiKey) {
@@ -223,8 +231,9 @@ function launchState(state) {
   mapAdapter.panTo(state.player.pos, 18);
 
   engine = new GameEngine(state, {
-    onFrame: (nextState) => {
+    onFrame: (nextState, renderMetadata) => {
       currentState = nextState;
+      mapAdapter?.setAnimationTime?.(renderMetadata.animationTimeMs);
       mapAdapter?.setSnapshot(nextState);
       const now = performance.now();
       if (nextState.mapFollowsPlayer && nextState.player.target && now - followPulseAt > 620) {
@@ -246,7 +255,12 @@ function launchState(state) {
   globalThis.__DEAD_GROUND_DEBUG__ = {
     getState: () => currentState,
     getEngine: () => engine,
-    render: () => currentState && ui.renderGame(currentState, settings)
+    render: () => currentState && ui.renderGame(currentState, settings),
+    getSpriteStatus: () => spriteAtlasStatus(),
+    setAnimationTime: (value) => {
+      mapAdapter?.setAnimationTime?.(Number(value) || 0);
+      if (currentState) mapAdapter?.setSnapshot(currentState);
+    }
   };
   engine.start();
   sound.unlock().catch(() => {});
@@ -317,6 +331,7 @@ async function applySettings(nextSettings) {
   saveSettings(settings);
   sound.setEnabled(settings.soundEnabled);
   ui.shell.classList.toggle("reduce-motion", settings.reducedMotion);
+  mapAdapter?.setReducedMotion?.(settings.reducedMotion);
   ui.renderSetup({ selectedStart, hasSave: hasSave(), settings });
   if (currentState) ui.renderGame(currentState, settings);
 

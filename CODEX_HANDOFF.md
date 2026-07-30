@@ -1,4 +1,4 @@
-# Reprise du projet avec Codex — Dead Ground 2.1.0
+# Reprise du projet avec Codex — Dead Ground 2.2.0
 
 ## Mission
 
@@ -6,7 +6,7 @@ Continuer **Dead Ground: Satellite Survival**, jeu navigateur solo de survie zom
 
 ## État livré
 
-La version 2.1 est jouable de l’installation jusqu’à la victoire et comprend :
+La version 2.2 est jouable de l’installation jusqu’à la victoire et comprend :
 
 - Google Maps satellite, géocodage et Places API (New) ;
 - terrain procédural de secours ;
@@ -24,6 +24,8 @@ La version 2.1 est jouable de l’installation jusqu’à la victoire et compren
 - sauvegardes principales/secondaires, migration 1.x, import/export ;
 - PWA responsive ;
 - pack de onze illustrations originales OpenAI, registre stable et cache hors ligne ;
+- neuf atlas tactiques OpenAI et leur manifeste inclus dans le cache PWA, avec poses articulées et animations huit directions du joueur et des sept infectés ;
+- fourgon orthographique animé, événements d’action transitoires et fallback vectoriel ;
 - suite automatisée moteur, migration, stockage, rendu et UI, plus une simulation longue de six jours.
 
 ## Commande obligatoire avant livraison
@@ -73,6 +75,10 @@ Une modification visuelle doit aussi être contrôlée en :
 - `src/ui.js` : DOM, HUD, onglets et modales.
 - `src/visuals.js` : registre des images et attribution stable des portraits.
 - `src/assets/visuals/` : onze WebP originaux inclus dans la PWA.
+- `src/sprites.js` : catalogue, préchargement et lecture des atlas tactiques.
+- `src/assets/sprites/` : neuf PNG transparents et leur manifeste.
+- `scripts/build_sprite_atlases.py` : reconstruction des atlas depuis les maîtres et plaques de poses détourés conservés hors dépôt.
+- `tests/sprites.test.mjs` : format, alpha/chroma, cellules, directions, sampling et événements d’animation.
 - `src/storage.js` : sauvegarde, backup, import/export et paramètres.
 - `src/audio.js` : effets Web Audio.
 - `tests/long-run.test.mjs` : stabilité sur six jours.
@@ -122,5 +128,5 @@ Une modification visuelle doit aussi être contrôlée en :
 ## Prompt prêt à donner à Codex
 
 ```text
-Travaille directement dans ce dépôt Dead Ground: Satellite Survival 2.1.0. Lis README.md, GAME_DESIGN.md, CODEX_HANDOFF.md et QA_REPORT.md avant de modifier le code. Implémente réellement la fonctionnalité demandée et préserve le mode Google Maps satellite, Google Places et le terrain procédural de secours. Ne télécharge jamais les tuiles Google, ne masque pas les attributions et ne place aucune clé non restreinte dans le dépôt. Garde GameEngine indépendant de la carte et toutes les entités en latitude/longitude. Ajoute les migrations nécessaires, les tests ciblés et un test de régression. Exécute npm run validate, vérifie 1440×1000 et 390×844, puis documente précisément les fichiers, règles et limites restantes.
+Travaille directement dans ce dépôt Dead Ground: Satellite Survival 2.2.0. Lis README.md, GAME_DESIGN.md, CODEX_HANDOFF.md et QA_REPORT.md avant de modifier le code. Implémente réellement la fonctionnalité demandée et préserve le mode Google Maps satellite, Google Places et le terrain procédural de secours. Ne télécharge jamais les tuiles Google, ne masque pas les attributions et ne place aucune clé non restreinte dans le dépôt. Garde GameEngine indépendant du fournisseur de carte et toutes les entités en latitude/longitude. Ajoute les migrations nécessaires, les tests ciblés et un test de régression. Exécute npm run validate, vérifie 1440×1000 et 390×844, puis documente précisément les fichiers, règles et limites restantes.
 ```

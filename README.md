@@ -1,4 +1,4 @@
-# Dead Ground: Satellite Survival — 2.1.0
+# Dead Ground: Satellite Survival — 2.2.0
 
 **Dead Ground** est un jeu de survie zombie géolocalisé, jouable dans un navigateur. Le joueur choisit un point réel, l’utilise comme base, explore les environs, organise une communauté et prépare une évacuation au milieu d’un territoire contaminé.
 
@@ -11,9 +11,9 @@ Les positions du joueur, de la base, des lieux, des avant-postes et des infecté
 
 ![Sélection du point de départ](docs/screenshots/game-v2-menu-desktop.png)
 
-![Partie sur ordinateur](docs/screenshots/game-v2-desktop.png)
+![Animations tactiques sur ordinateur](docs/screenshots/game-v2-2-animation-actions.png)
 
-![Partie sur mobile](docs/screenshots/game-v2-mobile.png)
+![Partie animée sur mobile](docs/screenshots/game-v2-2-animated-mobile.png)
 
 ## Les dix mises à jour majeures de la version 2.0
 
@@ -74,6 +74,9 @@ Trois modules de signal sont disséminés dans le secteur. Après les avoir réc
 - interface responsive, tactile et clavier ;
 - sons procéduraux Web Audio ;
 - pack de onze illustrations originales générées avec OpenAI et optimisées pour l’interface ;
+- neuf atlas tactiques originaux issus d’ImageGen : joueur, sept infectés et fourgon, avec poses articulées et clips d’action ; huit directions pour les acteurs biologiques et rotation continue du fourgon ;
+- déclenchement fidèle des animations de tir, mêlée, blessure, attaque, cri, crachat, mort et immobilisation du fourgon ;
+- fallback vectoriel immédiat si un atlas tarde ou échoue, et poses stables lorsque la réduction des animations est activée ;
 - PWA installable et mode procédural hors ligne ;
 - build statique prêt pour Vercel ;
 - contrôle syntaxique multiplateforme, audit TypeScript `checkJs`, tests automatisés et validation du build.
@@ -195,7 +198,7 @@ npm run check         # syntaxe JavaScript
 npm run check:types   # audit TypeScript allowJs + checkJs
 npm test              # suite de tests Node
 npm run build         # production dans dist/
-npm run validate      # syntaxe + tests + build + validation du paquet
+npm run validate      # syntaxe + types + tests + build + validation PWA
 ```
 
 La commande `npm run validate` contrôle aussi les imports ES, les fichiers PWA, les références HTML, les pages légales et l’absence de fichiers de développement indésirables dans le paquet construit.
@@ -217,11 +220,15 @@ src/maps/fallback-map.js    terrain procédural de secours
 src/ui.js                   HUD, panneaux et fenêtres modales
 src/visuals.js              registre et attribution stable des visuels originaux
 src/assets/visuals/         pack WebP OpenAI inclus dans le shell hors ligne
+src/sprites.js              catalogue, préchargement et lecteur des atlas
+src/assets/sprites/         neuf atlas PNG et manifeste direction-major
 src/storage.js              sauvegarde principale, secours, import/export
 src/audio.js                sons Web Audio
 service-worker.js           cache des seuls fichiers appartenant au jeu
 privacy.html / terms.html   information et conditions destinées au joueur
+scripts/build_sprite_atlases.py  reconstruction depuis les maîtres externes
 scripts/                    build et validation statique
+tests/sprites.test.mjs      format, pixels, sampling et événements des atlas
 tests/                      tests moteur, migration, rendu et simulation longue
 ```
 

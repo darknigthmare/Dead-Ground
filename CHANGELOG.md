@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.2.0 — 2026-07-30 — Tactical Animation Atlases
+
+### Ajouté
+
+- neuf sources maîtres originales générées avec le mode ImageGen intégré d’OpenAI ;
+- plaques OpenAI de neuf poses articulées par acteur biologique, puis atlas PNG transparents pour le joueur, les sept familles d’infectés et le fourgon ;
+- clips complets de repos, déplacement, sprint, tir, mêlée, attaque, blessure, mort, cri, crachat, conduite et immobilisation ;
+- huit directions discrètes pour les acteurs biologiques et rotation continue du fourgon orthographique ;
+- catalogue, préchargement asynchrone, sampling direction-major et fallback vectoriel ;
+- événements visuels transitoires identifiés par acteur, sans persistance et sans consommation du RNG de gameplay ;
+- cadavres temporaires capables de terminer leur animation après le retrait des infectés du moteur ;
+- horloge d’animation issue des pas `dt`, mise à l’échelle selon le zoom et poses adaptées à la réduction des mouvements ;
+- manifeste d’atlas, pipeline Pillow réexécutable à partir des maîtres externes, tests du format et cache complet dans le shell PWA.
+
+### Vérifié
+
+- absence de chroma visible, de RGB caché sous l’alpha, de cellule hors texture et de fichier supérieur à 1 Mo ;
+- dimensions maximales limitées à 4 096 px et paquet complet de poses articulées inférieur à 6 Mo ;
+- anciens rendus vectoriels conservés lorsque les images ne sont pas disponibles ;
+- animations et actions contrôlées en 1 440 × 1 000 et 390 × 844, y compris hors ligne et avec réduction des mouvements ;
+- région de ressources horizontale rendue accessible au clavier et audit axe-core WCAG 2 A/AA sans violation.
+
 ## 2.1.0 — 2026-07-30 — Original Visual Pack
 
 ### Ajouté

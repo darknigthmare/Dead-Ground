@@ -1,4 +1,4 @@
-# Rapport de validation — Dead Ground 2.1.0
+# Rapport de validation — Dead Ground 2.2.0
 
 Date : **30 juillet 2026**
 
@@ -7,94 +7,84 @@ Date : **30 juillet 2026**
 La chaîne reproductible a été exécutée sous Windows avec Node.js :
 
 ```bash
-npm install
 npm run validate
-npm audit --audit-level=high
+npm audit --audit-level=moderate
 ```
 
 Résultats :
 
-- syntaxe JavaScript : **35 fichiers validés** ;
+- syntaxe JavaScript : **37 fichiers validés** ;
 - audit TypeScript `allowJs + checkJs` : réussi ;
-- tests Node : **101 réussis sur 101** ;
+- tests Node : **114 réussis sur 114** ;
 - build statique sans clé Google : réussi ;
-- validation des imports, références, pages légales et shell PWA : **37 fichiers cohérents** ;
+- validation des imports, références, pages légales et shell PWA : **48 fichiers cohérents** ;
 - audit npm : **0 vulnérabilité**.
+
+Une simulation déterministe de six jours exécute 14 400 pas moteur. Elle contrôle l’absence d’exception, de valeur non finie, de ressource négative et de fuite au-delà des plafonds de zombies, journal et historique de missions.
 
 ## Parcours couverts
 
 La suite automatisée vérifie notamment :
 
-- création de mondes procéduraux et hybrides, campagne, modules, nids et épave ;
-- combat manuel, mêlée et autofire pendant les assauts de lieux ;
-- défenseurs associés à leur POI, sans duplication après annulation ;
-- vagues nocturnes, siège final, ressources renouvelables et victoire ;
-- priorité des défaites létales sur la victoire et élimination de toutes les signatures au siège final ;
-- communauté, rôles, blessures, moral et soins autonomes ;
-- recherche, artisanat, infrastructures, avant-postes et missions ;
-- position, proximité, stationnement, carburant, blindage et réparation du fourgon ;
-- marqueur, distance et trajet de retour vers le fourgon garé ;
-- migration 1.x/2.x, récupération secondaire, limites de collections et valeurs extrêmes ;
-- nettoyage du contenu descriptif Google dans la sauvegarde principale et sa copie ;
-- expiration des coordonnées Places, stabilité des types tactiques et déplacement de l’épave ;
-- import/export borné à 5 Mo et rejet des identifiants ou valeurs dangereuses ;
-- plafonnement des vagues et temporisateurs, consommation du générateur sans boucle excessive ;
-- composition du terrain fallback avec la couche canvas ;
-- focus, annonces, pause, paramètres et états `inert` de l’interface.
-- registre des onze visuels, présence physique, unicité, poids borné et attribution stable des portraits.
+- mondes procéduraux et hybrides, campagne, modules, nids et épave ;
+- combat manuel, mêlée et autofire pendant les assauts ;
+- vagues nocturnes, siège final, ressources renouvelables, défaite prioritaire et victoire ;
+- communauté, rôles, blessures, moral, soins, recherche, artisanat, avant-postes et missions ;
+- position, trajet, carburant, intégrité, réparation et stationnement du fourgon ;
+- migration 1.x/2.x, récupération secondaire, import/export borné et assainissement ;
+- expiration des coordonnées Places et exclusion du contenu descriptif Google ;
+- terrain de secours, projection, overlays, focus, pause, paramètres et modales accessibles ;
+- registre et cache des onze WebP d’interface ;
+- catalogue des neuf atlas, manifeste direction-major, dimensions, poids, alpha, chroma, cellules, sampling, zoom, réduction des mouvements et fallback vectoriel ;
+- événements réels de tir, mêlée, attaque, cri, crachat, blessure, mort et immobilisation, sans consommation du RNG de gameplay ;
+- persistance des cadavres animés après retrait moteur, cap du fourgon indépendant de la visée, cri non écrasé par une attaque et mort du joueur visible en véhicule ;
+- horloge et actions figées pendant une pause manuelle, animations terminales autorisées à finir.
 
-Une simulation déterministe de six jours exécute 14 400 pas moteur. Elle contrôle l’absence d’exception, de valeur non finie, de ressource négative et de fuite au-delà des plafonds de zombies, journal et historique de missions.
+## Vérification des atlas 2.2.0
+
+- **9 atlas PNG RGBA** : joueur, sept infectés et fourgon ;
+- **2 300 cellules utilisées** et manifeste cohérent ;
+- plaques OpenAI de neuf poses articulées pour les huit acteurs biologiques ;
+- huit directions `N, NE, E, SE, S, SW, W, NW` ; rotation continue de la source orthographique du fourgon ;
+- taille totale : **5 055 638 octets**, chaque texture sous 1 Mo et chaque dimension sous 4 096 px ;
+- aucun RGB caché sous alpha nul, aucun résidu chroma, aucune cellule vide, rognée ou hors texture ;
+- plusieurs poses distinctes dans chaque clip multiframe ;
+- formes vectorielles historiques conservées lorsque le chargement ou le décodage d’un atlas échoue.
 
 ## Vérification navigateur locale
 
-Le serveur Node du dépôt a été lancé sur HTTP, puis le parcours a été joué dans un Chromium frais avec l’outil `agent-browser`.
+Le paquet `dist/` a été servi sur un port isolé, puis contrôlé dans un Chromium frais avec `agent-browser`.
 
-### Ordinateur — 1440 × 1000
+### Ordinateur — 1 440 × 1 000
 
-- terrain procédural, routes et bâtiments réellement visibles sous les overlays ;
-- choix de difficulté et création d’une base ;
-- consentement informatif affiché avant la demande de géolocalisation ;
-- monde créé avec 22 POI, 3 modules, 1 épave et 3 nids ;
-- horloge figée pendant le tutoriel, puis reprise après fermeture ;
-- focus placé dans le tutoriel, la pause et les écrans terminaux, puis rendu au jeu à la fermeture ;
-- sept onglets accessibles, missions affichées et départ d’expédition effectif ;
-- pause et paramètres sans reprise involontaire ;
-- sauvegarde locale retrouvée après rechargement et bouton Continuer fonctionnel ;
-- pages Confidentialité et Conditions servies et rendues ;
-- paquet `dist/` relancé séparément, sans clé Google et sans erreur ;
-- service worker contrôlant la page et rechargement du jeu réussi réseau coupé ;
-- routes propres `/privacy` et `/terms` rendues avec leur contenu légal même hors ligne à cache froid ;
-- aucune erreur de page ou de console observée.
+- joueur, sept familles d’infectés et fourgon rendus simultanément ;
+- repos, déplacement, tir, mêlée, attaque, blessure, cri, crachat, mort et état hors service contrôlés ;
+- sampling de frames réellement animé, avec images distinctes à deux temps moteur ;
+- **9 atlas prêts, 0 échec** ;
+- terrain procédural préservé sous les sprites ;
+- aucune erreur de page ou de console.
 
 ### Mobile — 390 × 844
 
-- largeur du document égale à celle du viewport, sans débordement horizontal ;
-- HUD, carte, fiche de POI et commandes tactiles rendus ;
-- tiroir Gestion initialement masqué et `inert` ;
-- ouverture au-dessus des commandes, navigation vers Missions et fermeture vérifiées ;
-- retour à l’état masqué, `aria-hidden=true` et `inert=true`.
+- largeur du document strictement égale au viewport, sans débordement horizontal ;
+- HUD, carte, sprites, fiche de POI, gestion et commandes tactiles rendus ;
+- **9 atlas prêts, 0 échec** ;
+- région horizontale des ressources focalisable au clavier, nommée comme région ;
+- audit axe-core WCAG 2 A/AA : **0 violation** ; le contraste reste incomplet pour les fonds en dégradé et a été contrôlé visuellement.
 
-## Vérification du pack visuel 2.1.0
+### PWA, hors ligne et réduction des mouvements
 
-- scène d’ouverture rendue et décodée en 1280 × 720 sur ordinateur et mobile ;
-- six portraits civils assignés par `survivor.id`, rôle conservé comme badge décoratif ;
-- fourgon et poste radio visibles dans Atelier et Missions sans déplacer les informations ni les commandes ;
-- illustrations de défaite et de victoire lisibles en 390 × 844 ;
-- modales terminales bornées et défilables en paysage 844 × 390 ;
-- largeur du document strictement égale au viewport sur les deux formats ;
-- serveur source et serveur `dist` capables de servir WebP avec le bon type MIME ;
-- cache `dead-ground-2.1.0` prêt avec **11 visuels sur 11** ;
-- rechargement de `dist` réseau coupé, titre et scène d’ouverture toujours rendus ;
-- aucune erreur de page, de console ni overlay de framework.
-
-L’audit axe-core WCAG 2 A/AA ne remonte **aucune violation** sur le jeu ni sur la page Confidentialité. Le contraste automatisé reste marqué « incomplet » lorsque le fond est un dégradé ; ces zones ont été contrôlées sur les captures réelles.
+- service worker contrôlant la page et cache local `dead-ground-2.2.0` actif ;
+- `src/sprites.js`, manifeste et neuf atlas présents : **11 ressources d’animation sur 11** ;
+- serveur réellement arrêté avant rechargement : menu, sauvegarde et partie animée encore disponibles, **9 atlas prêts** ;
+- avec réduction des mouvements, boucles figées sur une pose et actions non bouclées tenues sur leur pose finale ;
+- aucun échec de ressource, erreur de page ou erreur de console observé.
 
 Captures fraîches :
 
-- `docs/screenshots/game-v2-menu-desktop.png` ;
-- `docs/screenshots/game-v2-desktop.png` ;
-- `docs/screenshots/game-v2-mobile.png`.
+- `docs/screenshots/game-v2-2-animation-actions.png` ;
+- `docs/screenshots/game-v2-2-animated-mobile.png`.
 
-## Point non exécuté en direct
+## Point non exécuté avec une clé facturable
 
-Google Maps satellite, Geocoding et Nearby Search n’ont pas été appelés avec une clé facturable réelle : aucune clé navigateur restreinte n’a été fournie. Le contrat de requête Places est limité à `id` et `location`, les erreurs d’authentification basculent vers le terrain procédural et ces chemins sont couverts par tests. La validation des quotas, de la facturation et des restrictions HTTP doit être faite avec la clé du propriétaire sur son domaine final.
+Google Maps satellite, Geocoding et Nearby Search n’ont pas été appelés avec une clé réelle : aucune clé navigateur restreinte n’a été fournie. Le contrat Places est limité à `id` et `location`, les erreurs d’authentification basculent vers le terrain procédural et ces chemins sont couverts par tests. La validation des quotas, de la facturation et des restrictions HTTP reste à faire avec la clé du propriétaire sur son domaine final.

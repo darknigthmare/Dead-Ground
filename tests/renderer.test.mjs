@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { drawGameOverlay, drawSelectionOverlay } from "../src/renderer.js";
 import { FallbackMapAdapter } from "../src/maps/fallback-map.js";
+import { installSpriteAtlasForTests, resetSpriteAtlasesForTests } from "../src/sprites.js";
 import { createInitialState } from "../src/world.js";
 
 function createCanvasContextSpy() {
@@ -24,6 +25,7 @@ function createCanvasContextSpy() {
     stroke: () => calls.push(["stroke"]),
     fillRect: (...args) => calls.push(["fillRect", ...args]),
     strokeRect: (...args) => calls.push(["strokeRect", ...args]),
+    drawImage: (...args) => calls.push(["drawImage", ...args]),
     setLineDash: (...args) => calls.push(["setLineDash", ...args]),
     fillText: (...args) => calls.push(["fillText", ...args]),
     measureText: (text) => ({ width: String(text).length * 7 }),
@@ -83,6 +85,74 @@ test("le fourgon garé est dessiné à vehicle.pos et non à une position fictiv
   assert.ok(calls.some(
     ([name, x, y]) => name === "translate" && Math.abs(x - expected.x) < 0.01 && Math.abs(y - expected.y) < 0.01
   ));
+});
+
+test("le fourgon actif garde son cap de déplacement pendant une action de tir", () => {
+  const origin = { lat: 43.2965, lng: 5.3698 };
+  const state = createInitialState({ start: origin, difficultyId: "normal", seed: 9090 });
+  const vehicleImage = { width: 576, height: 384 };
+  state.vehicle.discovered = true;
+  state.vehicle.repaired = true;
+  state.vehicle.active = true;
+  state.vehicle.condition = 100;
+  state.vehicle.heading = 0.42;
+  state.player.heading = 1.4;
+  state.player.target = { lat: origin.lat + 0.001, lng: origin.lng };
+  state.effects.push({
+    id: "qa-player-fire",
+    type: "actor-action",
+    actorId: "player",
+    animation: "fire",
+    heading: 2.2,
+    from: { ...origin },
+    to: { ...origin },
+    ttl: 0.2,
+    maxTtl: 0.34
+  });
+  const { ctx, calls } = createCanvasContextSpy();
+  installSpriteAtlasForTests("vehicle", vehicleImage);
+  try {
+    drawGameOverlay(ctx, projectAround(origin), state, { width: 1000, height: 720 }, { zoom: 18 });
+    const drawIndex = calls.findIndex(([name, image]) => name === "drawImage" && image === vehicleImage);
+    assert.ok(drawIndex > 0);
+    assert.deepEqual(calls[drawIndex - 1], ["rotate", state.vehicle.heading]);
+  } finally {
+    resetSpriteAtlasesForTests();
+  }
+});
+
+test("une mort dans le fourgon affiche le survivant tombé et non le véhicule actif", () => {
+  const origin = { lat: 43.2965, lng: 5.3698 };
+  const state = createInitialState({ start: origin, difficultyId: "normal", seed: 9191 });
+  const playerImage = { width: 576, height: 4032 };
+  const vehicleImage = { width: 576, height: 384 };
+  state.vehicle.discovered = true;
+  state.vehicle.repaired = true;
+  state.vehicle.active = true;
+  state.vehicle.condition = 95;
+  state.player.health = 0;
+  state.status = "gameover";
+  state.effects.push({
+    id: "qa-player-death",
+    type: "actor-action",
+    actorId: "player",
+    animation: "death",
+    heading: 0.7,
+    from: { ...origin },
+    to: { ...origin },
+    ttl: 0.8,
+    maxTtl: 1.2
+  });
+  const { ctx, calls } = createCanvasContextSpy();
+  installSpriteAtlasForTests("player", playerImage);
+  installSpriteAtlasForTests("vehicle", vehicleImage);
+  try {
+    drawGameOverlay(ctx, projectAround(origin), state, { width: 1000, height: 720 }, { zoom: 18 });
+    assert.ok(calls.some(([name, image]) => name === "drawImage" && image === playerImage));
+    assert.equal(calls.some(([name, image]) => name === "drawImage" && image === vehicleImage), false);
+  } finally {
+    resetSpriteAtlasesForTests();
+  }
 });
 
 test("le repère de sélection de départ se dessine sans dépendance navigateur", () => {
