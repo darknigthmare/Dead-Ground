@@ -1,4 +1,4 @@
-# Dead Ground: Satellite Survival — 2.0.1
+# Dead Ground: Satellite Survival — 2.1.0
 
 **Dead Ground** est un jeu de survie zombie géolocalisé, jouable dans un navigateur. Le joueur choisit un point réel, l’utilise comme base, explore les environs, organise une communauté et prépare une évacuation au milieu d’un territoire contaminé.
 
@@ -73,6 +73,7 @@ Trois modules de signal sont disséminés dans le secteur. Après les avoir réc
 - sauvegarde automatique locale, copie de secours, migration des sauvegardes 1.x, import et export JSON ;
 - interface responsive, tactile et clavier ;
 - sons procéduraux Web Audio ;
+- pack de onze illustrations originales générées avec OpenAI et optimisées pour l’interface ;
 - PWA installable et mode procédural hors ligne ;
 - build statique prêt pour Vercel ;
 - contrôle syntaxique multiplateforme, audit TypeScript `checkJs`, tests automatisés et validation du build.
@@ -214,6 +215,8 @@ src/renderer.js             couche tactique canvas
 src/maps/google-map.js      satellite, géocodage, Nearby Search, projection
 src/maps/fallback-map.js    terrain procédural de secours
 src/ui.js                   HUD, panneaux et fenêtres modales
+src/visuals.js              registre et attribution stable des visuels originaux
+src/assets/visuals/         pack WebP OpenAI inclus dans le shell hors ligne
 src/storage.js              sauvegarde principale, secours, import/export
 src/audio.js                sons Web Audio
 service-worker.js           cache des seuls fichiers appartenant au jeu
@@ -221,6 +224,8 @@ privacy.html / terms.html   information et conditions destinées au joueur
 scripts/                    build et validation statique
 tests/                      tests moteur, migration, rendu et simulation longue
 ```
+
+La provenance, les formats et la direction artistique du pack sont documentés dans [`docs/OPENAI_VISUALS.md`](docs/OPENAI_VISUALS.md).
 
 ## Déploiement Vercel
 

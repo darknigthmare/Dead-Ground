@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.1.0 — 2026-07-30 — Original Visual Pack
+
+### Ajouté
+
+- onze illustrations originales générées avec le mode ImageGen intégré d’OpenAI ;
+- scène d’ouverture, poste radio, six portraits civils, fourgon, défaite et évacuation ;
+- attribution déterministe des portraits par identifiant, sans modifier les sauvegardes ;
+- chargement léger, recadrages responsive et textes HTML conservés pour l’accessibilité ;
+- mise en cache des images dans le shell PWA et validation automatisée de chaque fichier.
+
+### Direction artistique
+
+- survie contemporaine semi-réaliste dans un secteur européen ou méditerranéen anonyme ;
+- palette charbon/olive, signaux vert lime et éclairage rouge réservé à la défaite ;
+- aucun logo, marque, texte lisible, gore, fichier officiel ou référence de franchise.
+
 ## 2.0.1 — 2026-07-28 — Production Hardening
 
 ### Corrigé

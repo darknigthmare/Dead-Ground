@@ -276,6 +276,41 @@ button:disabled {
   border-bottom: 1px solid var(--line);
 }
 
+.setup-hero {
+  position: relative;
+  height: 122px;
+  margin: -7px -7px 18px;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: #070a08;
+}
+
+.setup-hero::after,
+.mission-visual-banner::after,
+.ending-art::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 44%, rgba(2, 6, 3, .52));
+}
+
+.setup-hero img,
+.mission-visual-banner img,
+.ending-art img,
+.vehicle-visual img,
+.survivor-avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.setup-hero img {
+  filter: saturate(.82) contrast(1.06);
+}
+
 .brand-kicker,
 .modal-kicker {
   display: block;
@@ -1502,7 +1537,10 @@ button:disabled {
 
 .modal-card {
   width: min(430px, 100%);
+  max-height: calc(100dvh - 40px - var(--safe-top) - var(--safe-bottom));
   padding: 26px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--line-strong);
   border-radius: 17px;
   background: var(--panel-strong);
@@ -1620,6 +1658,24 @@ button:disabled {
 
 .gameover-card .modal-kicker {
   color: var(--danger);
+}
+
+.ending-art {
+  position: relative;
+  height: 145px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #070a08;
+}
+
+.ending-art img {
+  object-position: center 55%;
+}
+
+.victory-card .ending-art img {
+  object-position: center 62%;
 }
 
 .gameover-stats {
@@ -2336,7 +2392,7 @@ button:disabled {
 
 .survivor-card {
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) 126px;
+  grid-template-columns: 48px minmax(0, 1fr) 126px;
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -2350,14 +2406,40 @@ button:disabled {
 }
 
 .survivor-avatar {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 46px;
+  height: 46px;
+  overflow: hidden;
   border: 1px solid var(--line-strong);
   border-radius: 50%;
   color: var(--accent);
   background: rgba(3, 9, 5, .5);
+}
+
+.survivor-avatar img {
+  filter: saturate(.84) contrast(1.04);
+}
+
+.survivor-avatar span {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(201, 244, 107, .48);
+  border-radius: 50%;
+  background: rgba(2, 7, 4, .9);
+  color: var(--accent);
+  font-size: .53rem;
+  line-height: 1;
+}
+
+.survivor-card.injured .survivor-avatar img {
+  filter: grayscale(.72) saturate(.42) contrast(1.04);
 }
 
 .survivor-copy {
@@ -2445,7 +2527,7 @@ button:disabled {
 
 .vehicle-card {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 58px minmax(0, 1fr);
   gap: 10px;
   margin-bottom: 16px;
   padding: 12px;
@@ -2462,13 +2544,19 @@ button:disabled {
 .vehicle-visual {
   display: grid;
   place-items: center;
-  width: 50px;
-  height: 50px;
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
   border: 1px solid rgba(108, 167, 255, .38);
   border-radius: 10px;
   color: #a9caff;
   background: rgba(28, 55, 102, .2);
   font-size: 1.35rem;
+}
+
+.vehicle-visual img {
+  object-position: center;
+  filter: saturate(.78) contrast(1.08);
 }
 
 .vehicle-card small,
@@ -2593,6 +2681,21 @@ button:disabled {
   border-left: 3px solid #6ca7ff;
 }
 
+.mission-visual-banner {
+  position: relative;
+  height: 96px;
+  margin: 4px 0 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #070a08;
+}
+
+.mission-visual-banner img {
+  object-position: center 57%;
+  filter: saturate(.8) contrast(1.06);
+}
+
 .mission-history {
   display: grid;
   gap: 5px;
@@ -2693,8 +2796,14 @@ button:disabled {
   .condition-chips { width: 48%; }
   .signal-grid { width: 48%; }
   .poi-card { bottom: calc(244px + var(--safe-bottom)); }
-  .survivor-card { grid-template-columns: 34px minmax(0, 1fr); }
+  .setup-hero {
+    height: 84px;
+    margin-bottom: 14px;
+  }
+  .survivor-card { grid-template-columns: 48px minmax(0, 1fr); }
   .survivor-card select { grid-column: 1 / -1; }
+  .mission-visual-banner { height: 74px; }
+  .ending-art { height: 108px; }
   .inventory-grid { grid-template-columns: 1fr; }
   .recipe-card,
   .research-card,
@@ -2709,4 +2818,15 @@ button:disabled {
   }
   .campaign-card .panel-title { display: grid; }
   .role-summary { grid-template-columns: repeat(5, minmax(44px, 1fr)); }
+}
+
+@media (max-height: 590px) {
+  .ending-art {
+    height: 82px;
+    margin-bottom: 12px;
+  }
+
+  .gameover-stats {
+    margin: 12px 0;
+  }
 }

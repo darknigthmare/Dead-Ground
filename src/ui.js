@@ -22,6 +22,7 @@ import {
   gameDay,
   isNight
 } from "./geo.js";
+import { portraitForSurvivor, VISUAL_ASSETS } from "./visuals.js";
 
 export class GameUI {
   constructor(root, callbacks = {}) {
@@ -58,6 +59,9 @@ export class GameUI {
 
         <section id="setup-panel" class="setup-panel glass-panel" aria-labelledby="setup-title">
           <div class="brand-lockup">
+            <div class="setup-hero" aria-hidden="true">
+              <img src="${VISUAL_ASSETS.menu}" alt="" width="1280" height="720" fetchpriority="high" decoding="async" />
+            </div>
             <span class="brand-kicker">SURVIE GÉOLOCALISÉE</span>
             <h1 id="setup-title">DEAD GROUND</h1>
             <p>Choisissez n’importe quel point du monde, fortifiez votre position puis explorez les alentours envahis.</p>
@@ -244,6 +248,7 @@ export class GameUI {
 
         <div id="gameover-modal" class="modal-backdrop" hidden>
           <section class="modal-card gameover-card" role="dialog" aria-modal="true" aria-labelledby="gameover-title">
+            <div class="ending-art" aria-hidden="true"><img src="${VISUAL_ASSETS.gameOver}" alt="" width="960" height="540" decoding="async" /></div>
             <span class="modal-kicker">TRANSMISSION PERDUE</span>
             <h2 id="gameover-title">La zone est tombée</h2>
             <div id="gameover-stats" class="gameover-stats"></div>
@@ -256,6 +261,7 @@ export class GameUI {
 
         <div id="victory-modal" class="modal-backdrop" hidden>
           <section class="modal-card victory-card" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+            <div class="ending-art" aria-hidden="true"><img src="${VISUAL_ASSETS.victory}" alt="" width="960" height="540" decoding="async" /></div>
             <span class="modal-kicker">CONVOI D’ÉVACUATION</span>
             <h2 id="victory-title">Le secteur a survécu</h2>
             <p>La dernière horde est tombée. Votre communauté rejoint une zone d’extraction sécurisée.</p>
@@ -1029,7 +1035,7 @@ export class GameUI {
         ${state.base.roster.map((survivor) => {
           const role = SURVIVOR_ROLES[survivor.role] ?? SURVIVOR_ROLES.idle;
           return `<article class="survivor-card ${survivor.injured ? "injured" : ""}">
-            <div class="survivor-avatar">${role.icon}</div>
+            <div class="survivor-avatar" aria-hidden="true"><img src="${portraitForSurvivor(survivor.id)}" alt="" width="320" height="320" loading="lazy" decoding="async" /><span>${role.icon}</span></div>
             <div class="survivor-copy"><strong>${escapeHtml(survivor.name)}</strong><small>Arrivé jour ${survivor.joinedDay} · Moral ${Math.round(survivor.morale)}%</small><div class="mini-meter"><i style="width:${survivor.health}%"></i></div></div>
             <select data-survivor-role="${survivor.id}" aria-label="Rôle de ${escapeHtml(survivor.name)}" ${!state.player.atBase ? "disabled" : ""}>
               ${Object.entries(SURVIVOR_ROLES).map(([id, definition]) => `<option value="${id}" ${id === survivor.role ? "selected" : ""}>${definition.icon} ${escapeHtml(definition.label)}</option>`).join("")}
@@ -1071,7 +1077,7 @@ export class GameUI {
         <div><span>⌬ Antidotes</span><b>${state.inventory.antidote}</b><button type="button" data-action="antidote" ${state.inventory.antidote <= 0 || state.player.infection <= 0 ? "disabled" : ""}>INJECTER</button></div>
       </div>
       <article class="vehicle-card ${vehicle.active ? "active" : ""}">
-        <div class="vehicle-visual">▰</div>
+        <div class="vehicle-visual" aria-hidden="true"><img src="${VISUAL_ASSETS.vehicle}" alt="" width="384" height="384" loading="lazy" decoding="async" /></div>
         <div><small>VÉHICULE D’EXPÉDITION</small><strong>${escapeHtml(VEHICLE_DEFINITION.label)}</strong><p>${!vehicle.discovered ? "Localisez l’épave grâce à la transmission radio." : !vehicle.repaired ? "L’épave est revenue à la base. Recherchez la mécanique puis réparez-la." : `État ${Math.round(vehicle.condition)} % · garé à ${formatDistance(vehicleDistance)} · ${formatDistance(vehicle.distanceTravelled)} parcourus`}</p></div>
         <div class="vehicle-actions">
           ${vehicle.discovered && !vehicle.repaired ? `<button type="button" data-action="repair-vehicle" class="primary-button compact" ${!state.player.atBase || !state.research.unlocked.includes("mechanics") || !canAfford(state.resources, vehicleCost) ? "disabled" : ""}>Réparer · ${formatCost(vehicleCost)}</button>` : ""}
@@ -1112,6 +1118,7 @@ export class GameUI {
     const missions = state.missions.active.slice().sort((a, b) => a.expiresAtMinutes - b.expiresAtMinutes);
     this.panelContent.innerHTML = `
       <div class="panel-title"><div><small>TRANSMISSIONS RADIO</small><h2>Missions actives</h2></div><span>${missions.length} active(s)</span></div>
+      <div class="mission-visual-banner" aria-hidden="true"><img src="${VISUAL_ASSETS.missions}" alt="" width="960" height="480" loading="lazy" decoding="async" /></div>
       <p class="panel-description">Les missions expirent. La radio et le réseau maillé augmentent le nombre de transmissions disponibles chaque matin.</p>
       <div class="mission-list">
         ${missions.map((mission) => {

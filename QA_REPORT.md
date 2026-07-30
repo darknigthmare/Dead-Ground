@@ -1,6 +1,6 @@
-# Rapport de validation — Dead Ground 2.0.1
+# Rapport de validation — Dead Ground 2.1.0
 
-Date : **28 juillet 2026**
+Date : **30 juillet 2026**
 
 ## Résultat préproduction
 
@@ -14,11 +14,11 @@ npm audit --audit-level=high
 
 Résultats :
 
-- syntaxe JavaScript : **32 fichiers validés** ;
+- syntaxe JavaScript : **35 fichiers validés** ;
 - audit TypeScript `allowJs + checkJs` : réussi ;
-- tests Node : **98 réussis sur 98** ;
+- tests Node : **101 réussis sur 101** ;
 - build statique sans clé Google : réussi ;
-- validation des imports, références, pages légales et shell PWA : **25 fichiers cohérents** ;
+- validation des imports, références, pages légales et shell PWA : **37 fichiers cohérents** ;
 - audit npm : **0 vulnérabilité**.
 
 ## Parcours couverts
@@ -41,6 +41,7 @@ La suite automatisée vérifie notamment :
 - plafonnement des vagues et temporisateurs, consommation du générateur sans boucle excessive ;
 - composition du terrain fallback avec la couche canvas ;
 - focus, annonces, pause, paramètres et états `inert` de l’interface.
+- registre des onze visuels, présence physique, unicité, poids borné et attribution stable des portraits.
 
 Une simulation déterministe de six jours exécute 14 400 pas moteur. Elle contrôle l’absence d’exception, de valeur non finie, de ressource négative et de fuite au-delà des plafonds de zombies, journal et historique de missions.
 
@@ -72,6 +73,19 @@ Le serveur Node du dépôt a été lancé sur HTTP, puis le parcours a été jou
 - tiroir Gestion initialement masqué et `inert` ;
 - ouverture au-dessus des commandes, navigation vers Missions et fermeture vérifiées ;
 - retour à l’état masqué, `aria-hidden=true` et `inert=true`.
+
+## Vérification du pack visuel 2.1.0
+
+- scène d’ouverture rendue et décodée en 1280 × 720 sur ordinateur et mobile ;
+- six portraits civils assignés par `survivor.id`, rôle conservé comme badge décoratif ;
+- fourgon et poste radio visibles dans Atelier et Missions sans déplacer les informations ni les commandes ;
+- illustrations de défaite et de victoire lisibles en 390 × 844 ;
+- modales terminales bornées et défilables en paysage 844 × 390 ;
+- largeur du document strictement égale au viewport sur les deux formats ;
+- serveur source et serveur `dist` capables de servir WebP avec le bon type MIME ;
+- cache `dead-ground-2.1.0` prêt avec **11 visuels sur 11** ;
+- rechargement de `dist` réseau coupé, titre et scène d’ouverture toujours rendus ;
+- aucune erreur de page, de console ni overlay de framework.
 
 L’audit axe-core WCAG 2 A/AA ne remonte **aucune violation** sur le jeu ni sur la page Confidentialité. Le contraste automatisé reste marqué « incomplet » lorsque le fond est un dégradé ; ces zones ont été contrôlées sur les captures réelles.
 

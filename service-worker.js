@@ -25,6 +25,18 @@ const APP_SHELL = [
   "./src/audio.js",
   "./src/renderer.js",
   "./src/ui.js",
+  "./src/visuals.js",
+  "./src/assets/visuals/menu-sector-fall.webp",
+  "./src/assets/visuals/missions-radio-desk.webp",
+  "./src/assets/visuals/survivor-01.webp",
+  "./src/assets/visuals/survivor-02.webp",
+  "./src/assets/visuals/survivor-03.webp",
+  "./src/assets/visuals/survivor-04.webp",
+  "./src/assets/visuals/survivor-05.webp",
+  "./src/assets/visuals/survivor-06.webp",
+  "./src/assets/visuals/vehicle-expedition-top.webp",
+  "./src/assets/visuals/ending-zone-fallen.webp",
+  "./src/assets/visuals/ending-convoy-evacuation.webp",
   "./src/maps/google-map.js",
   "./src/maps/fallback-map.js"
 ];

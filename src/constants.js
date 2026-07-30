@@ -1,4 +1,4 @@
-export const APP_VERSION = "2.0.1";
+export const APP_VERSION = "2.1.0";
 export const GAME_VERSION = 2;
 export const SAVE_KEY = "dead-ground-save-v2";
 export const BACKUP_SAVE_KEY = "dead-ground-save-v2-backup";
